@@ -1,130 +1,133 @@
 # indoor/body_registry.py
+# ============================================================
+# GLOBAL BODY REGISTRY (FINAL SAFE VERSION)
+# ------------------------------------------------------------
+# RULES:
+# - Face = GLOBAL AUTHORITY (ONLY source of identity)
+# - Body = GLOBAL PROPAGATION (ONLY for face-verified IDs)
+# - Margin-based safety to prevent false identity
+# - NEVER assign identity to person without prior face anchor
+# ============================================================
+
 import os
-from typing import Dict, Optional, Tuple
-
 import numpy as np
-
+from typing import Dict, Optional, Tuple
 from config.paths import BODY_EMB_DIR
 from config.settings import SETTINGS
 
 
 class BodyRegistry:
-    """
-    Registry global untuk embedding tubuh (OSNet) per identity.
-    Fungsi:
-      - Menyimpan profil badan setiap identity (nama)
-      - Dipakai untuk ReID lintas kamera tanpa harus lihat wajah lagi
-    Disimpan ke disk: data/body_embeddings/<nama>.npy
-    """
 
     def __init__(self):
         os.makedirs(BODY_EMB_DIR, exist_ok=True)
+
+        # name -> normalized embedding
         self._profiles: Dict[str, np.ndarray] = {}
-        self.threshold: float = SETTINGS["body_reid_threshold"]
-        self.momentum: float = SETTINGS["body_profile_momentum"]
+
+        # 🔑 ONLY identities that have appeared with FACE
+        self.face_verified = set()
+
+        # thresholds
+        self.threshold = SETTINGS["body_reid_threshold"]
+        self.margin = SETTINGS["body_reid_margin"]
+        self.momentum = SETTINGS["body_profile_momentum"]
 
         self._load_all()
 
-    # -----------------------------------------------------
-    # INTERNAL HELPERS
-    # -----------------------------------------------------
-    def _path_for(self, name: str) -> str:
-        safe_name = str(name).replace("/", "_")
-        return os.path.join(BODY_EMB_DIR, f"{safe_name}.npy")
+    # ========================================================
+    # PATH
+    # ========================================================
+    def _path(self, name: str):
+        return os.path.join(BODY_EMB_DIR, f"{name}.npy")
 
-    def _load_all(self) -> None:
+    # ========================================================
+    # LOAD EXISTING BODY PROFILES
+    # ========================================================
+    def _load_all(self):
         self._profiles.clear()
-        for fname in os.listdir(BODY_EMB_DIR):
-            if not fname.endswith(".npy"):
-                continue
-            name = fname[:-4]
-            fpath = os.path.join(BODY_EMB_DIR, fname)
-            try:
-                emb = np.load(fpath).astype(np.float32)
-                if emb is not None:
-                    self._profiles[name] = emb
-            except Exception as e:
-                print(f"[BodyRegistry] Skip {fname}: {e}")
-        print(f"[BodyRegistry] Loaded {len(self._profiles)} body profiles.")
 
-    # -----------------------------------------------------
-    # PUBLIC: UPDATE / SAVE PROFILE
-    # -----------------------------------------------------
-    def update_profile(self, name: str, emb: np.ndarray) -> None:
+        if not os.path.exists(BODY_EMB_DIR):
+            return
+
+        for f in os.listdir(BODY_EMB_DIR):
+            if f.endswith(".npy"):
+                name = f[:-4]
+                emb = np.load(self._path(name)).astype(np.float32)
+                emb = emb / (np.linalg.norm(emb) + 1e-6)
+
+                self._profiles[name] = emb
+                # NOTE:
+                # face_verified will be filled ONLY when face is seen again
+
+        print(f"[BodyRegistry] Loaded {len(self._profiles)} body profiles")
+
+    # ========================================================
+    # 🔑 FACE → BODY (GLOBAL ANCHOR)
+    # ========================================================
+    def force_assign(self, name: str, emb: np.ndarray):
         """
-        Update / tambah profil body untuk identity 'name'.
-        Menggunakan exponential moving average:
-            new = m * emb + (1-m) * old
-        Lalu disimpan ke file .npy.
+        Called ONLY after successful FACE recognition.
+        This is the ONLY place where identity is authorized.
         """
         if emb is None:
             return
 
         emb = emb.astype(np.float32)
-        if name not in self._profiles:
-            new_emb = emb
-        else:
+        emb = emb / (np.linalg.norm(emb) + 1e-6)
+
+        if name in self._profiles:
             old = self._profiles[name]
             m = self.momentum
-            new_emb = (m * emb + (1.0 - m) * old).astype(np.float32)
+            emb = (m * emb + (1 - m) * old)
+            emb = emb / (np.linalg.norm(emb) + 1e-6)
 
-        self._profiles[name] = new_emb
+        self._profiles[name] = emb
+        self.face_verified.add(name)          # 🔑 MARK AS FACE-VERIFIED
+        np.save(self._path(name), emb)
 
-        # Simpan ke disk
-        path = self._path_for(name)
-        try:
-            np.save(path, new_emb)
-        except Exception as e:
-            print(f"[BodyRegistry] Failed to save {path}: {e}")
+        print(f"[BodyRegistry] FACE ANCHOR → BODY '{name}'")
 
-    # -----------------------------------------------------
-    # PUBLIC: MATCH BODY EMBEDDING → IDENTITY
-    # -----------------------------------------------------
+    # ========================================================
+    # BODY MATCH (SAFE, FACE-VERIFIED ONLY)
+    # ========================================================
     def match(self, emb: np.ndarray) -> Tuple[Optional[str], float]:
         """
-        Cari identity paling mirip berdasarkan body embedding.
-        Return: (name, score_cosine) atau (None, score) jika tidak cukup mirip.
+        Body Re-ID is allowed ONLY for identities that:
+        - Have been previously verified by FACE
+        - Pass threshold AND margin test
         """
-        if emb is None or len(self._profiles) == 0:
+        if emb is None or not self._profiles or not self.face_verified:
             return None, 0.0
 
-        emb = emb.astype(np.float32)
-        norm = np.linalg.norm(emb) + 1e-6
-        emb_norm = emb / norm
+        emb = emb / (np.linalg.norm(emb) + 1e-6)
 
-        best_name: Optional[str] = None
-        best_score: float = -1.0
+        scores = []
+        for name, ref in self._profiles.items():
+            # ❗ HARD SAFETY: skip identities without face anchor
+            if name not in self.face_verified:
+                continue
 
-        for name, prof in self._profiles.items():
-            prof_norm = prof / (np.linalg.norm(prof) + 1e-6)
-            s = float(np.dot(emb_norm, prof_norm))
-            if s > best_score:
-                best_score = s
-                best_name = name
+            s = float(np.dot(emb, ref))
+            scores.append((name, s))
 
-        if best_score < self.threshold:
-            return None, best_score
+        if not scores:
+            return None, 0.0
 
-        return best_name, best_score
+        scores.sort(key=lambda x: x[1], reverse=True)
 
-    # -----------------------------------------------------
-    # UTILITY
-    # -----------------------------------------------------
-    def list_identities(self):
-        return list(self._profiles.keys())
+        best_name, best_score = scores[0]
+        second_score = scores[1][1] if len(scores) > 1 else 0.0
 
-    def get_profile(self, name: str) -> Optional[np.ndarray]:
-        return self._profiles.get(name, None)
+        if (
+            best_score >= self.threshold
+            and (best_score - second_score) >= self.margin
+        ):
+            return best_name, best_score
 
-    def clear(self):
-        self._profiles.clear()
-        for fname in os.listdir(BODY_EMB_DIR):
-            if fname.endswith(".npy"):
-                try:
-                    os.remove(os.path.join(BODY_EMB_DIR, fname))
-                except Exception as e:
-                    print(f"[BodyRegistry] Failed to remove {fname}: {e}")
+        return None, best_score
 
 
-# Singleton global yang dipakai semua kamera (thread)
+# ============================================================
+# SINGLETON
+# ============================================================
 body_registry = BodyRegistry()

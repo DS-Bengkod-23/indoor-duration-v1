@@ -1,21 +1,28 @@
 # config/settings.py
 # ==========================================================
-#  SETTINGS – LONG RANGE + HIGH FPS (UPDATED + BODY REID SAFE)
+#  SETTINGS – Multi-camera (webcam / IP cam) + Presence rules
 # ==========================================================
 
 SETTINGS = {
 
-    # CAMERA
-    "camera_indexes": [0],
-    "max_cameras": 2,
+    # CAMERA:
+    "camera_indexes": [
+        "http://192.168.42.155:8080/video",
+        0
+    ],
+
+    "max_cameras": 4,
 
     # FACE DETECTION – YuNet (long range)
-    "face_conf_threshold": 0.65,
+    "face_conf_threshold": 0.60,
     "face_nms_threshold": 0.30,
     "face_input_size": (640, 480),
 
-    # FACE RECOGNITION – InsightFace (long-range)
-    "face_recog_threshold": 0.40,
+    # FACE RECOGNITION – InsightFace (ArcFace)
+    # set rendah supaya mirip project lama (recog threshold sekitar 0.38)
+    "face_recog_threshold": 0.25,
+    "face_recog_strict": 0.30,
+    "face_recog_min_frames": 1,
 
     # PERSON DETECTION – YOLOv8n
     "yolo_conf_threshold": 0.45,
@@ -23,13 +30,13 @@ SETTINGS = {
     "yolo_classes": [0],  # 0 = person
 
     # TRACKING – DeepSORT
-    "max_age": 20,
+    "max_age": 30,
     "min_hits": 3,
-    "max_iou_distance": 0.55,
+    "max_iou_distance": 0.70,
 
-    # FUSION – Face→Body
-    "face_body_iou_match": 0.05,
-    "id_lock_duration": 3.0,
+    # FUSION
+    "face_body_iou_match": 0.02,
+    "id_lock_duration": 2.0,
     "lock_sticky": True,
 
     # REGISTRATION
@@ -37,26 +44,45 @@ SETTINGS = {
     "registration_key": "r",
     "save_embedding_npy": True,
 
-    # ======================================================
     # PERFORMANCE / INTERVAL
-    # ======================================================
-    "det_interval": 3,   # YOLO tiap 3 frame
-    "face_interval": 6,  # face detect+recog tiap 6 frame
-
+    # urgent: face interval lebih sering daripada sebelumnya supaya pengenal cepat
+    "det_interval": 3,
+    "face_interval": 3,
     "frame_resize": 720,
     "skip_frames": 0,
     "use_half_precision": False,
     "async_mode": True,
 
-    # ======================================================
-    # BODY ReID GLOBAL
-    # ======================================================
-    "body_reid_threshold": 0.50,
-    "body_reid_strict": 0.75,
-    "body_reid_min_frames": 2,
-    "body_profile_momentum": 0.6,
+    # BODY ReID GLOBAL (OSNet)
+    "body_reid_threshold": 0.60,
+    "body_reid_strict": 0.70,
+    "body_reid_min_frames": 7,
+    "body_profile_momentum": 0.7,
+    "body_reid_margin": 0.06,
 
     # LOG
     "show_fps": True,
     "save_logs": False,
+
+    # PRESENCE MANAGER (INDOOR / UNKNOWN / OUTDOOR)
+    "presence_timeout": 10.0,
+    "unknown_to_outdoor": 10.0,
+
+    "room_mapping": {
+        "CAM_0": "Ruang Dosen",
+        "CAM_1": "Ruang Dosen",
+        "CAM_2": "Ruang H2.1",
+        "CAM_3": "Ruang Rapat",
+    },
+
+    "default_room_name": "Ruangan Tidak Dikenal",
+
+    # Kamera reader settings
+    "cap_width": 640,
+    "cap_height": 360,
+    "cap_fps": 10,
+
+    # DEBUG FLAGS (opsional)
+    "debug_mode": False,
+    "debug_save_unknown": False,
 }
