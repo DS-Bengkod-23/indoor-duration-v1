@@ -89,13 +89,11 @@ class MultiObjectTracker:
             return None
 
     # =========================================================
-    # MATCH FACE → TRACK (IOU ONLY)
+    # MATCH FACE → TRACK (IOU ONLY, NO BODY REQUIREMENT)
     # =========================================================
     def _find_best_track_for_face(self, face_box, tracks):
         fx1, fy1, fx2, fy2 = face_box
-        best_iou = 0.0
-        best_tid = None
-        best_feat = None
+        best_iou, best_tid, best_feat = 0.0, None, None
 
         for tid, (x1, y1, x2, y2), feat in tracks:
             ix1 = max(fx1, x1)
@@ -144,6 +142,7 @@ class MultiObjectTracker:
         active_ids = {tid for tid, _, _ in tracks}
         self.fusion.remove_missing(active_ids)
 
+        # clear dead body cache
         for tid in list(self.body_feature_cache.keys()):
             if tid not in active_ids:
                 self.body_feature_cache.pop(tid)
@@ -153,16 +152,17 @@ class MultiObjectTracker:
         # =====================================================
         if len(tracks) == 1:
             tid, (x1, y1, x2, y2), _ = tracks[0]
+
             if not self.fusion.get_id(tid):
                 feat = self.extract_body_feature(frame, (x1, y1, x2, y2), tid)
                 if feat is not None:
-                    name, _ = body_registry.match(feat)
+                    name, score = body_registry.match(feat)
                     if name is not None:
                         self.fusion.lock(tid, name)
                         print(f"[BODY→LOCK] {name} via OSNet")
 
         # =====================================================
-        # 3. FACE = GLOBAL AUTHORITY (BOOTSTRAP)
+        # 3. FACE = GLOBAL AUTHORITY (BOOTSTRAP FIX)
         # =====================================================
         if self.frame_idx % self.face_interval == 0:
             faces = self.face_detector.detect(frame)
@@ -182,6 +182,7 @@ class MultiObjectTracker:
                 if name is None:
                     continue
 
+                # threshold logic
                 if len(tracks) == 1:
                     if score < SETTINGS["face_recog_threshold"]:
                         continue
@@ -198,9 +199,11 @@ class MultiObjectTracker:
                 if self.fusion.get_id(tid) == name:
                     continue
 
+                # 🔑 BOOTSTRAP LOCK (FACE FIRST)
                 self.fusion.lock(tid, name)
                 print(f"[FACE→LOCK] {name} (score={score:.3f})")
 
+                # BODY FEATURE OPTIONAL (NO DEADLOCK)
                 if body_feat is not None:
                     body_registry.force_assign(name, body_feat)
 
