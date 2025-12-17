@@ -56,9 +56,9 @@ SETTINGS = {
     # BODY ReID GLOBAL (OSNet)
     "body_reid_threshold": 0.60,
     "body_reid_strict": 0.70,
-    "body_reid_min_frames": 7,
+    "body_reid_min_frames": 5,
     "body_profile_momentum": 0.7,
-    "body_reid_margin": 0.06,
+    "body_reid_margin": 0.08,
 
     # LOG
     "show_fps": True,
