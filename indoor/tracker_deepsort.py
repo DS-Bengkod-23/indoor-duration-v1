@@ -1,19 +1,17 @@
 # indoor/tracker_deepsort.py
 # ============================================================
-# MULTI-OBJECT TRACKER (FINAL – SAFE + HIGH FPS)
+# MULTI-OBJECT TRACKER (FINAL – SAFE MULTI CAMERA)
 # ------------------------------------------------------------
-# DESIGN PRINCIPLES:
-# - Face = GLOBAL AUTHORITY (BOOTSTRAP identity)
-# - Body = GLOBAL PROPAGATION (AFTER face verified)
-# - Track = temporary carrier
-# - NO identity guessing
-# - NO weak propagation
-# - OSNet cached per track
+# GUARANTEES:
+# - Face = ONLY authority to introduce identity
+# - Face recognition = FINAL COMMIT (langsung lock)
+# - Body = ONLY propagation AFTER face seen ON THAT TRACK
+# - Unknown person NEVER gets a name
+# - No cross-camera & no cross-person false identity
 # ============================================================
 
 import cv2
 import time
-import numpy as np
 
 from indoor.face_detector import FaceDetectorYuNet
 from indoor.person_detector import PersonDetectorYOLO
@@ -47,17 +45,30 @@ class MultiObjectTracker:
         self.last_tracks = []
         self.prev_time = time.time()
 
-        # ================= FPS OPT =================
-        self.body_feature_cache = {}  # tid -> (feature, last_frame)
+        # ================= BODY CACHE =================
+        self.body_feature_cache = {}      # tid -> (feat, last_frame)
         self.body_feature_interval = 5
+
+        # body consistency counter
+        self.body_match_counter = {}      # tid -> count
+
+        # face → body cooldown
+        self.last_body_update_time = {}   # name -> timestamp
+        self.body_update_cooldown = 3.0
+
+        # 🔑 TRACK YANG PERNAH MELIHAT WAJAH
+        self.face_anchor_tracks = set()   # tid
+
+        # 🔒 FINAL COMMIT TRACK (TIDAK BOLEH UNLOCK)
+        self.final_locked_tracks = set()  # tid
 
         self.det_interval = max(1, SETTINGS.get("det_interval", 1))
         self.face_interval = max(1, SETTINGS.get("face_interval", 1))
 
-        print("[INIT] MultiObjectTracker initialized")
+        print("[INIT] MultiObjectTracker initialized (FINAL SAFE)")
 
     # =========================================================
-    # BODY FEATURE EXTRACTION (CACHED)
+    # BODY FEATURE EXTRACTION
     # =========================================================
     def extract_body_feature(self, frame, box, tid):
         if tid in self.body_feature_cache:
@@ -89,13 +100,13 @@ class MultiObjectTracker:
             return None
 
     # =========================================================
-    # MATCH FACE → TRACK (IOU ONLY, NO BODY REQUIREMENT)
+    # FACE → TRACK MATCH (IOU)
     # =========================================================
     def _find_best_track_for_face(self, face_box, tracks):
         fx1, fy1, fx2, fy2 = face_box
-        best_iou, best_tid, best_feat = 0.0, None, None
+        best_iou, best_tid = 0.0, None
 
-        for tid, (x1, y1, x2, y2), feat in tracks:
+        for tid, (x1, y1, x2, y2), _ in tracks:
             ix1 = max(fx1, x1)
             iy1 = max(fy1, y1)
             ix2 = min(fx2, x2)
@@ -106,13 +117,11 @@ class MultiObjectTracker:
             area_t = (x2 - x1) * (y2 - y1)
 
             iou = inter / (area_f + area_t - inter + 1e-6)
-
             if iou > best_iou:
                 best_iou = iou
                 best_tid = tid
-                best_feat = feat
 
-        return best_tid, best_feat
+        return best_tid
 
     # =========================================================
     # PROCESS FRAME
@@ -120,13 +129,12 @@ class MultiObjectTracker:
     def process_frame(self, frame):
         self.frame_idx += 1
         out = frame.copy()
+        now = time.time()
 
-        # =====================================================
-        # 1. PERSON DETECTION + DEEPSORT
-        # =====================================================
-        run_det = (self.frame_idx % self.det_interval == 0)
-
-        if run_det:
+        # -----------------------------------------------------
+        # 1. DETECTION + TRACKING
+        # -----------------------------------------------------
+        if self.frame_idx % self.det_interval == 0:
             dets, feats = [], []
             for x1, y1, x2, y2, conf in self.person_detector.detect(frame):
                 dets.append([x1, y1, x2, y2, conf])
@@ -142,28 +150,45 @@ class MultiObjectTracker:
         active_ids = {tid for tid, _, _ in tracks}
         self.fusion.remove_missing(active_ids)
 
-        # clear dead body cache
+        # cleanup when track truly gone
         for tid in list(self.body_feature_cache.keys()):
             if tid not in active_ids:
-                self.body_feature_cache.pop(tid)
+                self.body_feature_cache.pop(tid, None)
+                self.body_match_counter.pop(tid, None)
+                self.face_anchor_tracks.discard(tid)
+                self.final_locked_tracks.discard(tid)
 
-        # =====================================================
-        # 2. BODY RE-ID (ONLY AFTER FACE VERIFIED)
-        # =====================================================
-        if len(tracks) == 1:
-            tid, (x1, y1, x2, y2), _ = tracks[0]
+        # -----------------------------------------------------
+        # 2. BODY RE-ID (ONLY IF FACE-ANCHORED & NOT FINAL)
+        # -----------------------------------------------------
+        for tid, (x1, y1, x2, y2), _ in tracks:
+            if tid in self.final_locked_tracks:
+                continue
 
-            if not self.fusion.get_id(tid):
-                feat = self.extract_body_feature(frame, (x1, y1, x2, y2), tid)
-                if feat is not None:
-                    name, score = body_registry.match(feat)
-                    if name is not None:
-                        self.fusion.lock(tid, name)
-                        print(f"[BODY→LOCK] {name} via OSNet")
+            if tid not in self.face_anchor_tracks:
+                continue
 
-        # =====================================================
-        # 3. FACE = GLOBAL AUTHORITY (BOOTSTRAP FIX)
-        # =====================================================
+            feat = self.extract_body_feature(frame, (x1, y1, x2, y2), tid)
+            if feat is None:
+                continue
+
+            name, _ = body_registry.match(feat)
+            if name is None:
+                self.body_match_counter[tid] = 0
+                continue
+
+            cnt = self.body_match_counter.get(tid, 0) + 1
+            self.body_match_counter[tid] = cnt
+
+            if cnt >= 3:
+                self.fusion.lock(tid, name)
+                self.final_locked_tracks.add(tid)
+                print(f"[BODY→FINAL LOCK] {name}")
+                self.body_match_counter[tid] = 0
+
+        # -----------------------------------------------------
+        # 3. FACE = FINAL AUTHORITY (INSTANT COMMIT)
+        # -----------------------------------------------------
         if self.frame_idx % self.face_interval == 0:
             faces = self.face_detector.detect(frame)
 
@@ -179,37 +204,38 @@ class MultiObjectTracker:
                     continue
 
                 name, score = self.face_recognizer.identify(emb)
-                if name is None:
+                if name is None or score < SETTINGS["face_recog_threshold"]:
                     continue
 
-                # threshold logic
-                if len(tracks) == 1:
-                    if score < SETTINGS["face_recog_threshold"]:
-                        continue
-                else:
-                    if score < SETTINGS["face_recog_strict"]:
-                        continue
-
-                tid, body_feat = self._find_best_track_for_face(
+                tid = self._find_best_track_for_face(
                     (x, y, x + w, y + h), tracks
                 )
                 if tid is None:
                     continue
 
-                if self.fusion.get_id(tid) == name:
-                    continue
+                # 🔑 FINAL COMMIT LANGSUNG
+                if tid not in self.final_locked_tracks:
+                    self.fusion.lock(tid, name)
+                    self.face_anchor_tracks.add(tid)
+                    self.final_locked_tracks.add(tid)
+                    print(f"[FACE→FINAL LOCK] {name}")
 
-                # 🔑 BOOTSTRAP LOCK (FACE FIRST)
-                self.fusion.lock(tid, name)
-                print(f"[FACE→LOCK] {name} (score={score:.3f})")
+                # body profile update (optional, cooldown)
+                last_upd = self.last_body_update_time.get(name, 0)
+                if now - last_upd >= self.body_update_cooldown:
+                    for t_tid, (bx1, by1, bx2, by2), _ in tracks:
+                        if t_tid == tid:
+                            feat = self.extract_body_feature(
+                                frame, (bx1, by1, bx2, by2), tid
+                            )
+                            if feat is not None:
+                                body_registry.force_assign(name, feat)
+                                self.last_body_update_time[name] = now
+                            break
 
-                # BODY FEATURE OPTIONAL (NO DEADLOCK)
-                if body_feat is not None:
-                    body_registry.force_assign(name, body_feat)
-
-        # =====================================================
+        # -----------------------------------------------------
         # 4. DRAW
-        # =====================================================
+        # -----------------------------------------------------
         for tid, (x1, y1, x2, y2), _ in tracks:
             name = self.fusion.get_id(tid)
             color = (0, 255, 0) if name else (0, 180, 255)
@@ -217,31 +243,22 @@ class MultiObjectTracker:
 
             cv2.rectangle(out, (x1, y1), (x2, y2), color, 2)
             cv2.putText(
-                out,
-                label,
-                (x1, y1 - 8),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.6,
-                color,
-                2,
+                out, label, (x1, y1 - 8),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2
             )
 
-        # =====================================================
+        # -----------------------------------------------------
         # 5. FPS
-        # =====================================================
-        now = time.time()
+        # -----------------------------------------------------
         fps = 1.0 / max(now - self.prev_time, 1e-6)
         self.prev_time = now
 
         if SETTINGS.get("show_fps", True):
             cv2.putText(
-                out,
-                f"{fps:.1f} FPS",
+                out, f"{fps:.1f} FPS",
                 (10, 30),
                 cv2.FONT_HERSHEY_SIMPLEX,
-                1,
-                (0, 255, 0),
-                2,
+                1, (0, 255, 0), 2
             )
 
         return out

@@ -1,11 +1,12 @@
 # indoor/presence_manager.py
 # ============================================================
-# PRESENCE MANAGER (FINAL – ANTI SPAM, ROOM-AWARE)
+# PRESENCE MANAGER (FINAL – STABLE, ANTI SALAH SESAAT)
 # ------------------------------------------------------------
 # - Presence berbasis ROOM NAME (bukan kamera)
 # - Kamera berbeda tapi room sama = tetap INDOOR
 # - Grace time untuk cegah flip-flop antar kamera
-# - Log hanya dibuat saat status BENAR-BENAR berubah
+# - FALSE detection singkat TIDAK masuk log
+# - Log hanya dibuat saat status BENAR-BENAR stabil
 # ============================================================
 
 import time
@@ -15,11 +16,10 @@ from config.settings import SETTINGS
 
 class PresenceManager:
     """
-    Presence state machine (FINAL):
-      - Status: INDOOR -> UNKNOWN -> OUTDOOR
+    Presence state machine (FINAL STABLE):
+      - Status: PENDING → INDOOR → UNKNOWN → OUTDOOR
       - Key utama: room_name (bukan CAM_X)
-      - Grace window untuk perpindahan antar kamera
-      - Anti spam log
+      - PENDING mencegah salah log karena mis-prediksi sesaat
     """
 
     def __init__(self):
@@ -30,8 +30,11 @@ class PresenceManager:
             "default_room_name", "Ruangan Tidak Dikenal"
         )
 
-        # grace time anti flip-flop (detik)
+        # grace time antar kamera (detik)
         self.grace_move: float = 2.5
+
+        # 🔑 MINIMAL waktu agar kehadiran dianggap valid (ANTI SALAH SESUAT)
+        self.min_presence_time: float = 30.0
 
         # state:
         # person_id -> room_name -> {
@@ -90,41 +93,40 @@ class PresenceManager:
         self.logs[idx]["out_time"] = out_time
 
     # ---------------------------------------------------------
-    # core update (dipanggil dari VideoSystem)
+    # core update
     # ---------------------------------------------------------
     def update_presence(self, room_id: str, active_ids: Set[str], now: float):
         """
         room_id   : CAM_0, CAM_1, ...
-        active_ids: set person_id hasil tracker (SUDAH share ID)
+        active_ids: set person_id hasil tracker (SUDAH STABIL)
         """
 
         room_name = self._room_name(room_id)
         active_ids = set(active_ids)
 
+        # ======================================================
+        # UPDATE / CREATE STATES
+        # ======================================================
         for pid in active_ids:
             rooms = self.state.setdefault(pid, {})
 
-            # cari ruangan INDOOR aktif (jika ada)
             active_room = None
             active_state = None
             for rname, st in rooms.items():
-                if st["status"] == "INDOOR":
+                if st["status"] in ("INDOOR", "PENDING"):
                     active_room = rname
                     active_state = st
                     break
 
             # ==================================================
-            # KASUS 1: BELUM ADA RUANG AKTIF
+            # KASUS 1: BELUM ADA RUANG AKTIF → MASUK PENDING
             # ==================================================
             if active_room is None:
-                idx = self._append_log(
-                    pid, room_id, room_name, now, now, "INDOOR"
-                )
                 rooms[room_name] = {
                     "in_time": now,
                     "last_seen": now,
-                    "status": "INDOOR",
-                    "log_index": idx,
+                    "status": "PENDING",
+                    "log_index": None,
                 }
                 continue
 
@@ -133,43 +135,60 @@ class PresenceManager:
             # ==================================================
             if active_room == room_name:
                 active_state["last_seen"] = now
-                self._update_out_time(active_state["log_index"], now)
+
+                if active_state["status"] == "INDOOR":
+                    self._update_out_time(active_state["log_index"], now)
+
                 continue
 
             # ==================================================
-            # KASUS 3: TERDETEKSI DI RUANG LAIN
-            # → cek grace time
+            # KASUS 3: PINDAH RUANG (CEK GRACE TIME)
             # ==================================================
             delta = now - active_state["last_seen"]
             if delta < self.grace_move:
-                # masih dianggap ruangan lama
-                self._update_out_time(active_state["log_index"], now)
+                if active_state["status"] == "INDOOR":
+                    self._update_out_time(active_state["log_index"], now)
                 continue
 
             # ==================================================
-            # BENAR-BENAR PINDAH RUANG
+            # PINDAH RUANG VALID
             # ==================================================
-            # tutup ruangan lama
-            self._append_log(
-                pid,
-                room_id,
-                active_room,
-                active_state["in_time"],
-                active_state["last_seen"],
-                "OUTDOOR",
-            )
+            if active_state["status"] == "INDOOR":
+                self._append_log(
+                    pid,
+                    room_id,
+                    active_room,
+                    active_state["in_time"],
+                    active_state["last_seen"],
+                    "OUTDOOR",
+                )
+
             active_state["status"] = "OUTDOOR"
 
-            # buka ruangan baru
-            idx = self._append_log(
-                pid, room_id, room_name, now, now, "INDOOR"
-            )
             rooms[room_name] = {
                 "in_time": now,
                 "last_seen": now,
-                "status": "INDOOR",
-                "log_index": idx,
+                "status": "PENDING",
+                "log_index": None,
             }
+
+        # ======================================================
+        # PENDING → INDOOR (HANYA JIKA STABIL)
+        # ======================================================
+        for pid, rooms in self.state.items():
+            for rname, st in rooms.items():
+                if st["status"] == "PENDING":
+                    if now - st["in_time"] >= self.min_presence_time:
+                        idx = self._append_log(
+                            pid,
+                            rname,
+                            rname,
+                            st["in_time"],
+                            now,
+                            "INDOOR",
+                        )
+                        st["status"] = "INDOOR"
+                        st["log_index"] = idx
 
         # ======================================================
         # TIMEOUT HANDLING

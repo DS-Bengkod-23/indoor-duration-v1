@@ -7,7 +7,7 @@ SETTINGS = {
 
     # CAMERA:
     "camera_indexes": [
-        "http://192.168.42.155:8080/video",
+        "http://192.168.42.219:8080/video",
         0
     ],
 
