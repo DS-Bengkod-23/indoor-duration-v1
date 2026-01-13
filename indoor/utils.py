@@ -34,3 +34,53 @@ def compute_fps(prev_time):
     now = time.time()
     fps = 1 / (now - prev_time)
     return fps, now
+
+# 🔥 INDUSTRIAL LOGGING 🔥
+import logging
+from logging.handlers import TimedRotatingFileHandler
+import os
+
+def setup_logger():
+    if not os.path.exists("logs"): os.makedirs("logs")
+    
+    logger = logging.getLogger("IndoorTracking")
+    logger.setLevel(logging.INFO)
+    
+    # Format: [WAKTU] [LEVEL] PESAN
+    formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+    
+    # 1. File Handler (Simpan ke file, ganti tiap hari)
+    file_handler = TimedRotatingFileHandler("logs/system.log", when="midnight", interval=1, backupCount=7)
+    file_handler.setFormatter(formatter)
+    
+    # 2. Console Handler (Tetap muncul di layar)
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
+    
+    return logger
+
+# Global instance
+logger = setup_logger()
+
+# 🔥 INDUSTRIAL CONFIG VALIDATION 🔥
+def validate_settings(settings):
+    try:
+        if settings.get("max_cameras", 0) <= 0:
+            logger.critical("Config Error: 'max_cameras' harus > 0!")
+            return False
+            
+        if not isinstance(settings.get("face_input_size"), tuple) or len(settings["face_input_size"]) != 2:
+            logger.critical("Config Error: 'face_input_size' harus tuple (width, height)!")
+            return False
+            
+        # Relaxed check: Allow > 1.0 for "Ninja Mode" (Fast Motion)
+        if settings.get("max_iou_distance", 0.7) > 2.0:
+            logger.warning("Config Warning: 'max_iou_distance' > 2.0 terlalu ekstrem (Logic DeepSort mungkin rusak).")
+            
+        return True
+    except Exception as e:
+        logger.critical(f"Config Validation Crash: {e}")
+        return False

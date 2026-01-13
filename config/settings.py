@@ -1,88 +1,82 @@
 # config/settings.py
-# ==========================================================
-#  SETTINGS – Multi-camera (webcam / IP cam) + Presence rules
-# ==========================================================
-
 SETTINGS = {
-
-    # CAMERA:
-    "camera_indexes": [
-        "http://192.168.42.219:8080/video",
-        0
-    ],
-
+    "camera_indexes": [ 0, 
+                       "http://192.168.18.3:8080/video",
+                       #"http://192.168.41.10:8080/video",
+                        
+                       ], 
     "max_cameras": 4,
 
-    # FACE DETECTION – YuNet (long range)
-    "face_conf_threshold": 0.60,
+    # FACE DETECTION
+    "face_conf_threshold": 0.45,
     "face_nms_threshold": 0.30,
-    "face_input_size": (640, 480),
+    
+    # 🔥 UBAH KE INI: Resolusi 'Sweet Spot' (Tengah-tengah)
+    # 320x240 = Terlalu Kecil (Kotak ilang saat duduk)
+    # 640x480 = Terlalu Berat (Laptop panas/lag)
+    # 480x360 = PAS (Tajam & Ringan)
+    "face_input_size": (480, 360), 
 
-    # FACE RECOGNITION – InsightFace (ArcFace)
-    # set rendah supaya mirip project lama (recog threshold sekitar 0.38)
-    "face_recog_threshold": 0.25,
-    "face_recog_strict": 0.30,
+    # FACE RECOGNITION
+    "face_recog_threshold": 0.60,      
+    "face_recog_confirmed": 0.65,      
     "face_recog_min_frames": 1,
 
-    # PERSON DETECTION – YOLOv8n
-    "yolo_conf_threshold": 0.45,
-    "yolo_iou_threshold": 0.45,
-    "yolo_classes": [0],  # 0 = person
+    # PERSON DETECTION (YOLO)
+    "yolo_conf_threshold": 0.45,       
+    "yolo_iou_threshold": 0.65, 
+    "yolo_classes": [0],
 
-    # TRACKING – DeepSORT
-    "max_age": 30,
+    # TRACKING
+    "max_dist": 0.25,          # 🔥 RELAXED: 0.2 -> 0.25 (Biar re-id lebih toleran gerakan cepat)
+    "min_confidence": 0.3,     # Min confidence deteksi YOLO
+    "nms_max_overlap": 0.5,    # NMS threshold
+    "max_iou_distance": 1.1,   # 🔥 ULTRA RELAXED: 0.9 -> 1.1 (Boleh loncat jauh banget, gerakan Ninja OK)
+    "max_age": 70,             # Umur track sebelum dihapus
+    "n_init": 3,               # Frame minimal untuk confirm track
     "min_hits": 3,
-    "max_iou_distance": 0.70,
+    "body_rebind_threshold": 0.70,
 
     # FUSION
     "face_body_iou_match": 0.02,
-    "id_lock_duration": 2.0,
+    "id_lock_duration": 5.0,
     "lock_sticky": True,
 
-    # REGISTRATION
+    # PERFORMANCE
+    "det_interval": 4, # PERCEPAT: 5 -> 4 (Tracking lebih halus)
+    "face_interval": 12, # PERLAMBAT: 6 -> 12 (Face Rec berat, jangan sering-sering)
+    "frame_resize": 640,
+    "use_half_precision": True,
+
+    "body_reid_threshold": 0.70,
+    "body_profile_momentum": 0.8,
+    "body_reid_margin": 0.05,
+
+    "presence_timeout": 2.0, 
+    "room_mapping": {"CAM_0": "Ruang Dosen", "CAM_1": "Ruang Dosen", "CAM_2": "Ruang Aula"},
+    "cap_width": 640,
+    "cap_height": 480, 
+    "debug_mode": False,
+    "debug_save_unknown": False,
+    "show_fps": True,
+    "save_logs": False,
+    "unknown_to_outdoor": 10.0,
+    "default_room_name": "Ruangan Tidak Dikenal",
+    "cap_fps": 30, 
     "enable_registration_hotkey": True,
     "registration_key": "r",
     "save_embedding_npy": True,
 
-    # PERFORMANCE / INTERVAL
-    # urgent: face interval lebih sering daripada sebelumnya supaya pengenal cepat
-    "det_interval": 3,
-    "face_interval": 3,
-    "frame_resize": 720,
-    "skip_frames": 0,
-    "use_half_precision": False,
-    "async_mode": True,
-
-    # BODY ReID GLOBAL (OSNet)
-    "body_reid_threshold": 0.60,
-    "body_reid_strict": 0.70,
-    "body_reid_min_frames": 5,
-    "body_profile_momentum": 0.7,
-    "body_reid_margin": 0.08,
-
-    # LOG
-    "show_fps": True,
-    "save_logs": False,
-
-    # PRESENCE MANAGER (INDOOR / UNKNOWN / OUTDOOR)
-    "presence_timeout": 10.0,
-    "unknown_to_outdoor": 10.0,
-
-    "room_mapping": {
-        "CAM_0": "Ruang Dosen",
-        "CAM_1": "Ruang Dosen",
-        "CAM_2": "Ruang H2.1",
-        "CAM_3": "Ruang Rapat",
-    },
-
-    "default_room_name": "Ruangan Tidak Dikenal",
-
-    # Kamera reader settings
-    "cap_width": 640,
-    "cap_height": 360,
-    "cap_fps": 10,
-
-    # DEBUG FLAGS (opsional)
-    "debug_mode": False,
-    "debug_save_unknown": False,
+    # 🔥 NEW OPTIMIZED THRESHOLDS (v2.2 - BALANCED ADAPTIVE) 🔥
+    "thresh_anti_clone": 0.82,     
+    "thresh_same_room": 0.79, # 🔥 UPDATE: NAIKKAN DIKIT (0.72 -> 0.75) biar Stranger di satu ruangan gak gampang masuk.      
+    "thresh_diff_room": 0.81, # 🔥 UPDATE: LEBIH KETAT (0.78 -> 0.81) untuk cegah False Positive di kamera lain.      
+    # BLIND LOOKUP: Sedikit dilonggarkan (0.75 -> 0.70) biar crowds detection lebih mulus
+    # Nanti diketatkan lagi via Logic Adaptive di tracker code kalau sepi.
+    "thresh_blind_small": 0.70,    
+    "thresh_blind_large": 0.82,    
+    "thresh_back_view_learn": 0.60, 
+    "time_back_view_window": 3.0,  
+    # GLOBAL GATE: Sedikit dilonggarkan (0.65 -> 0.62) sebagai baseline untuk crowds.
+    "gate_threshold_global": 0.62  
 }

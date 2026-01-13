@@ -1,285 +1,262 @@
 # indoor/video.py
 import cv2
-import numpy as np
-import threading
 import time
-from typing import List, Any
-
-from indoor.tracker_deepsort import MultiObjectTracker
-from indoor.presence_manager import presence_manager
+import os
+import numpy as np
+from threading import Thread
 from config.settings import SETTINGS
+from config.paths import get_data_paths
+from indoor.tracker_deepsort import MultiObjectTracker
+from indoor.body_registry import body_registry
+from indoor.smart_camera import SmartVideoCapture # 🔥 MODUL BARU
 
-
-def _open_capture(source):
-    """
-    Buka capture robust:
-      - jika source bisa di-convert ke int -> treat as webcam index
-      - jika Windows & index -> use CAP_DSHOW to reduce MSMF errors
-      - otherwise open with default backend (support RTSP/http)
-    """
-    cap = None
-    try:
-        # numeric index?
-        idx = int(source)
-        # use CAP_DSHOW on Windows to reduce MSMF errors
-        backend = cv2.CAP_DSHOW
-        cap = cv2.VideoCapture(idx, backend)
-    except Exception:
-        # treat as URL or path
-        cap = cv2.VideoCapture(source)
-    return cap
-
-
-class CameraWorker(threading.Thread):
-    def __init__(self, cam_source: Any, shared_frames: List[Any], shared_ids: List[set], buffer_idx: int):
-        super().__init__()
-        self.cam_source = cam_source  # int index or string (URL)
-        self.buffer_idx = buffer_idx
-        self.shared_frames = shared_frames
-        self.shared_ids = shared_ids
+class VideoSystem:
+    def __init__(self, max_cameras=1):
+        self.sources = SETTINGS["camera_indexes"][:max_cameras]
+        self.trackers = []
+        for i in range(len(self.sources)):
+            trk = MultiObjectTracker()
+            trk.set_camera_id(i) 
+            self.trackers.append(trk)
+            
+        self.caps = []
         self.running = True
-
-        self.tracker = MultiObjectTracker()
-
-        # open capture
-        self.cap = _open_capture(cam_source)
-        if not self.cap or not self.cap.isOpened():
-            print(f"[WORKER] Camera {cam_source} gagal dibuka.")
-            self.running = False
-            return
-
-        # optional: speed settings
-        cap_w = SETTINGS.get("cap_width", 640)
-        cap_h = SETTINGS.get("cap_height", 360)
-        cap_fps = SETTINGS.get("cap_fps", 15)
-        try:
-            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, cap_w)
-            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, cap_h)
-            self.cap.set(cv2.CAP_PROP_FPS, cap_fps)
-        except Exception:
-            pass
-
-        self.fail_count = 0
-        self.max_fail = 200
-        self.reopen_threshold = 50  # coba reopen setelah X gagal
-
-    def _reopen(self):
-        try:
-            if self.cap:
-                self.cap.release()
-            time.sleep(0.5)
-            self.cap = _open_capture(self.cam_source)
-            if self.cap and self.cap.isOpened():
-                print(f"[WORKER] Camera {self.cam_source} berhasil reopen.")
-                self.fail_count = 0
-                return True
-        except Exception as e:
-            print(f"[WORKER] Reopen error {self.cam_source}: {e}")
-        return False
+        
+        for src in self.sources:
+            # 🔥 PAKAI SMART CAPTURE (Auto Reconnect)
+            cap = SmartVideoCapture(src, name=f"Cam_{self.sources.index(src)}")
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, SETTINGS["cap_width"])
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, SETTINGS["cap_height"])
+            
+            # 🔥 WAJIB ADA: ANTI-DELAY 🔥
+            # Ini memerintahkan kamera untuk tidak menumpuk frame lama.
+            # Tanpa ini, video akan telat (delay) walau FPS tinggi.
+            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+            
+            self.caps.append(cap)
+            
+        print(f"[SYSTEM] {len(self.caps)} Kamera aktif.")
+        print("[SYSTEM] Tekan 'q' untuk keluar.")
+        print("[SYSTEM] Tekan 'r' untuk REGISTRASI WAJAH & BADAN.")
+        print("[SYSTEM] Tekan 'x' untuk RESET DARURAT.") 
 
     def run(self):
         while self.running:
-            if not self.cap or not self.cap.isOpened():
-                # coba reopen periodik
-                self.fail_count += 1
-                if self.fail_count % 10 == 0:
-                    print(f"[WORKER] Camera {self.cam_source} tidak terbuka, mencoba reopen ({self.fail_count})")
-                if self.fail_count > self.max_fail:
-                    print(f"[WORKER] Camera {self.cam_source} stop (cannot open).")
-                    break
-                self._reopen()
-                time.sleep(0.2)
-                continue
+            frames = []
+            raw_frames = [] 
+            
+            for i, cap in enumerate(self.caps):
+                try:
+                    ret, frame = cap.read()
+                    
+                    if not ret:
+                        time.sleep(0.1)
+                        frame = np.zeros((480, 640, 3), dtype=np.uint8)
+                    
+                    # 🔥 FIX LIGHTING (REAL-LIFE CCTV) 🔥
+                    # Gunakan CLAHE untuk perbaiki kontras di lorong gelap/silau.
+                    try:
+                        lab = cv2.cvtColor(frame, cv2.COLOR_BGR2LAB)
+                        l, a, b = cv2.split(lab)
+                        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+                        cl = clahe.apply(l)
+                        limg = cv2.merge((cl, a, b))
+                        frame = cv2.cvtColor(limg, cv2.COLOR_LAB2BGR)
+                    except: pass # Safety kalau format pixel aneh
 
-            ok, frame = self.cap.read()
-            if not ok or frame is None:
-                self.fail_count += 1
-                if self.fail_count % 10 == 0:
-                    print(f"[WORKER] Camera {self.cam_source} gagal grab frame ({self.fail_count})")
-                time.sleep(0.05)
+                    # Resize ringan (Kunci FPS Tinggi)
+                    frame = cv2.resize(frame, SETTINGS["face_input_size"])
+                    
+                    # Simpan RAW
+                    raw_frames.append(frame.copy()) 
+                    
+                    # PROSES TRACKING
+                    processed_frame = self.trackers[i].process_frame(frame)
+                    
+                    cv2.putText(processed_frame, f"CAM {i}", (10, 20), 
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+                    
+                    frames.append(processed_frame)
+                except Exception as e:
+                    from indoor.utils import logger
+                    logger.error(f"[CRASH GUARD] Error di Cam {i}: {e}. Skipping frame.")
+                    
+                    # 🔥 FIX: Gunakan ukuran dari Settings agar Grid tidak Crash
+                    target_w, target_h = SETTINGS["face_input_size"]
+                    # Ingat: Numpy shape itu (Height, Width, Channel)
+                    frames.append(np.zeros((target_h, target_w, 3), dtype=np.uint8))
 
-                # coba reopen kalau sering gagal
-                if self.fail_count >= self.reopen_threshold:
-                    print(f"[WORKER] Camera {self.cam_source} terlalu sering gagal, coba reopen...")
-                    if self._reopen():
-                        print(f"[WORKER] Camera {self.cam_source} reopened.")
+            # Tampilkan Grid
+            if len(frames) == 1:
+                grid = frames[0]
+            elif len(frames) == 2:
+                grid = np.hstack(frames)
+            else:
+                top = np.hstack(frames[:2])
+                if len(frames) == 3:
+                    bottom = np.hstack([frames[2], np.zeros_like(frames[0])])
+                else:
+                    bottom = np.hstack(frames[2:4])
+                grid = np.vstack([top, bottom])
+
+            cv2.imshow("Multi-Camera Grid View", grid)
+
+            # KEYBOARD HANDLER
+            key = cv2.waitKey(1) & 0xFF
+            
+            if key == ord('q'):
+                self.stop()
+            
+            elif key == ord('r'):
+                # Tidak perlu pause di sini, biar handle_registration yang ngatur
+                if len(raw_frames) > 0:
+                    self.handle_registration(raw_frames[0], self.trackers[0])
+
+            elif key == ord('x'):
+                print("\n[USER COMMAND] Melakukan Reset Darurat...")
+                for tracker in self.trackers:
+                    tracker.emergency_reset()
+
+    def handle_registration(self, raw_frame, tracker):
+        # --- LANGKAH 1: Cari Track Aktif Terbesar ---
+        tracks = tracker.deepsort.get_active_tracks(with_feature=False)
+        best_track = None
+        max_area = 0
+        
+        for t in tracks:
+            tid = t[0]
+            bbox = t[1]
+            area = (bbox[2] - bbox[0]) * (bbox[3] - bbox[1])
+            if area > max_area:
+                max_area = area
+                best_track = t
+        
+        # --- LANGKAH 2: Cek Apakah Sudah Hijau (Auto-Update) ---
+        if best_track is not None:
+            tid = best_track[0]
+            bbox = best_track[1]
+            name, is_real = tracker.fusion.get_label(tid)
+            
+            # 🔥 DEBUG: Tampilkan status di Terminal biar jelas
+            print(f"[DEBUG] Tombol R Ditekan. Track ID: {tid}, Nama: {name}, Status Hijau: {is_real}")
+
+            if is_real and "Person" not in name:
+                print("\n" + "="*40)
+                print(f"   AUTO-UPDATE: {name}")
+                print("="*40)
+                
+                h, w = raw_frame.shape[:2]
+                x1, y1, x2, y2 = bbox
+                x1, y1 = max(0, int(x1)), max(0, int(y1))
+                x2, y2 = min(w, int(x2)), min(h, int(y2))
+                
+                crop_body = raw_frame[y1:y2, x1:x2]
+                
+                if crop_body.size > 0:
+                    feat = tracker.osnet.extract(crop_body)
+                    if feat is not None:
+                        body_registry.register(name, feat.flatten())
+                        print(f"✅ Data Punggung ditambahkan ke {name}.")
+                        
+                        # POP-UP KONFIRMASI VISUAL
+                        preview_save = crop_body.copy()
+                        cv2.rectangle(preview_save, (0,0), (preview_save.shape[1], preview_save.shape[0]), (0,255,0), 4)
+                        cv2.putText(preview_save, "SAVED!", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0,255,0), 3)
+                        
+                        cv2.imshow("SYSTEM NOTIFICATION", preview_save)
+                        cv2.waitKey(800) 
+                        cv2.destroyWindow("SYSTEM NOTIFICATION")
+                        
+                        return
                     else:
-                        print(f"[WORKER] Camera {self.cam_source} reopen gagal.")
-                if self.fail_count > self.max_fail:
-                    print(f"[WORKER] Camera {self.cam_source} stop (too many errors).")
-                    break
-                continue
+                        print("⚠️ Gagal ekstrak fitur.")
+                return
 
-            self.fail_count = 0
+        # --- LANGKAH 3: Manual Mode (Jika Belum Kenal/Tracker Putus) ---
+        print("\n[PAUSE] Memulai registrasi MANUAL... (TRACKER ORANGE/PUTUS)")
+        
+        clean_frame = raw_frame.copy()
+        faces = tracker.face_detector.detect(clean_frame)
+        
+        crop_body = None
+        face_emb = None
+        mode = "FACE"
+        
+        # ... (Kode ke bawah sama seperti sebelumnya) ...
+        # Copy paste sisa fungsi handle_registration yang lama di sini
+        # (Bagian if len(faces) > 0 dst...)
+        if len(faces) > 0:
+            best_face = max(faces, key=lambda f: f[2] * f[3]) 
+            x, y, w, h = best_face
+            
+            preview = clean_frame.copy()
+            cv2.rectangle(preview, (x, y), (x+w, y+h), (0, 255, 0), 3)
+            cv2.putText(preview, "WAJAH TERDETEKSI", (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+            cv2.imshow("Multi-Camera Grid View", preview)
+            cv2.waitKey(1)
 
-            # resize for speed
-            try:
-                frame = cv2.resize(frame, (SETTINGS.get("cap_width", 640), SETTINGS.get("cap_height", 360)))
-            except Exception:
-                pass
-
-            try:
-                processed = self.tracker.process_frame(frame)
-            except Exception as e:
-                print(f"[WORKER] Error di tracker camera {self.cam_source}: {e}")
-                time.sleep(0.01)
-                continue
-
-            # overlay index string supaya tahu sumbernya
-            cv2.putText(
-                processed,
-                f"{self.cam_source}",
-                (10, 60),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                1,
-                (0, 255, 0),
-                2,
-            )
-
-            # tulis ke shared buffers
-            self.shared_frames[self.buffer_idx] = processed
-
-            # ambil active person IDs dari tracker dan simpan
-            active_ids = self.tracker.get_active_identities()
-            self.shared_ids[self.buffer_idx] = active_ids
-
-        # cleanup sebelum keluar
-        try:
-            self.shared_frames[self.buffer_idx] = None
-            self.shared_ids[self.buffer_idx] = set()
-        except Exception:
-            pass
-
-        if self.cap:
-            self.cap.release()
-
-
-class VideoSystem:
-    def __init__(self, max_cameras=10):
-        self.max_cameras = max_cameras
-        # prefer camera_indexes dari settings jika tersedia
-        cams = SETTINGS.get("camera_indexes", [])
-        if cams:
-            self.cameras = cams[:]  # bisa berisi int atau URL string
+            crop_face = clean_frame[y:y+h, x:x+w]
+            face_emb = tracker.face_recognizer.get_embedding(cv2.cvtColor(crop_face, cv2.COLOR_BGR2RGB))
+            
+            h_img, w_img = clean_frame.shape[:2]
+            bx1 = max(0, x - int(w * 0.5))
+            by1 = max(0, y) 
+            bx2 = min(w_img, x + w + int(w * 0.5))
+            by2 = min(h_img, y + h * 4) 
+            crop_body = clean_frame[by1:by2, bx1:bx2]
+            
         else:
-            # fallback: scan 0..max_cameras-1 and take those that open
-            self.cameras = self.detect_cameras(self.max_cameras)
+            dets = tracker.person_detector.detect(clean_frame)
+            if len(dets) == 0:
+                print("\n❌ Gagal: Tidak ada orang. Mundur sedikit.")
+                return
 
-        print("🎥 Active cameras (configured):", self.cameras)
+            best_det = max(dets, key=lambda d: (d[2]-d[0]) * (d[3]-d[1]))
+            x1, y1, x2, y2 = int(best_det[0]), int(best_det[1]), int(best_det[2]), int(best_det[3])
+            
+            preview = clean_frame.copy()
+            cv2.rectangle(preview, (x1, y1), (x2, y2), (0, 165, 255), 3)
+            cv2.putText(preview, "PUNGGUNG (MANUAL)", (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 165, 255), 2)
+            cv2.imshow("Multi-Camera Grid View", preview)
+            cv2.waitKey(1)
+            
+            crop_body = clean_frame[y1:y2, x1:x2]
+            mode = "BODY_ONLY"
 
-        self.frames = [None] * len(self.cameras)
-        self.ids = [set() for _ in self.cameras]
-        self.workers = []
-
-        self.last_rescan = time.time()
-        self.rescan_interval = 5.0
-
-    def detect_cameras(self, max_cam):
-        detected = []
-        for i in range(max_cam):
-            try:
-                cap = cv2.VideoCapture(i)
-                ok, _ = cap.read()
-                cap.release()
-                if ok:
-                    detected.append(i)
-            except Exception:
-                pass
-        return detected
-
-    def start_workers(self):
-        for idx, cam in enumerate(self.cameras):
-            worker = CameraWorker(cam, self.frames, self.ids, idx)
-            if worker.running:
-                worker.start()
-                self.workers.append(worker)
-
-    def add_new_cameras_if_any(self):
-        # Re-scan only if using numeric scan fallback (not when camera_indexes provided)
-        configured = SETTINGS.get("camera_indexes", [])
-        if configured:
+        print("\n" + "="*40)
+        print(f"   REGISTRASI MANUAL ({mode})")
+        print("="*40)
+        
+        try:
+            print("⚠️ TRACKER BELUM HIJAU / PUTUS.")
+            print("👉 Masukkan Nama Manual di Terminal >> ")
+            name = input(f"Nama >> ").strip()
+        except EOFError:
             return
 
-        now = time.time()
-        if now - self.last_rescan < self.rescan_interval:
-            return
-        self.last_rescan = now
+        if not name: return
 
-        detected = self.detect_cameras(self.max_cameras)
-        new = [c for c in detected if c not in self.cameras]
-        for cam in new:
-            print(f"➕ Detected new camera: {cam}")
-            self.cameras.append(cam)
-            self.frames.append(None)
-            self.ids.append(set())
-            buffer_idx = len(self.frames) - 1
-            w = CameraWorker(cam, self.frames, self.ids, buffer_idx)
-            if w.running:
-                w.start()
-                self.workers.append(w)
+        paths = get_data_paths()
+        
+        if face_emb is not None:
+            save_path = os.path.join(paths["embeddings_dir"], f"{name}.npy")
+            np.save(save_path, face_emb)
+            print(f"✅ Wajah tersimpan.")
+            tracker.face_recognizer.load_embeddings(paths["embeddings_dir"])
 
-    def build_grid(self):
-        valid_frames = [f for f in self.frames if f is not None]
-        if len(valid_frames) == 0:
-            return None
-        if len(valid_frames) == 1:
-            try:
-                return cv2.resize(valid_frames[0], (1280, 720))
-            except Exception:
-                return valid_frames[0]
+        try:
+            if crop_body is not None and crop_body.size > 0:
+                body_emb = tracker.osnet.extract(crop_body)
+                if body_emb is not None:
+                    body_registry.register(name, body_emb.flatten()) 
+                    print(f"✅ Data Badan berhasil ditambahkan.")
+        except Exception as e:
+            print(f"⚠️ Error: {e}")
 
-        n = len(valid_frames)
-        rows = int(np.ceil(np.sqrt(n)))
-        cols = int(np.ceil(n / rows))
-        target_h = 360
-        resized = []
-        for f in valid_frames:
-            h, w = f.shape[:2]
-            scale = target_h / h
-            resized.append(cv2.resize(f, (int(w * scale), target_h)))
-        blank = np.zeros_like(resized[0])
-        while len(resized) < rows * cols:
-            resized.append(blank)
-        rows_list = []
-        k = 0
-        for r in range(rows):
-            rows_list.append(np.hstack(resized[k:k + cols]))
-            k += cols
-        return np.vstack(rows_list)
-
-    def run(self):
-        self.start_workers()
-        print("🚀 Multi-camera tracking berjalan...")
-
-        while True:
-            # add new cameras only if using fallback scan
-            self.add_new_cameras_if_any()
-
-            # Update presence (per camera source)
-            now = time.time()
-            for idx, cam in enumerate(self.cameras):
-                # normalize room_id as CAM_{index_in_list}
-                room_id = f"CAM_{idx}"
-                active_ids = self.ids[idx] if idx < len(self.ids) else set()
-                # debug print (optional)
-                # print(f"[DBG] update_presence {room_id} active={active_ids}")
-                presence_manager.update_presence(room_id, active_ids, now)
-
-            # show grid
-            grid = self.build_grid()
-            if grid is not None:
-                cv2.imshow("Multi-Camera Grid View", grid)
-
-            if cv2.waitKey(1) & 0xFF == ord("q"):
-                break
-
-        self.stop()
+        print("\n[INFO] Selesai.")
 
     def stop(self):
-        for w in self.workers:
-            w.running = False
-            w.join()
+        self.running = False
+        for cap in self.caps:
+            cap.release()
         cv2.destroyAllWindows()
-        now = time.time()
-        presence_manager.flush_all(now)
-        presence_manager.print_logs()
