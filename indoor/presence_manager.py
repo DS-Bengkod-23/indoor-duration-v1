@@ -10,8 +10,11 @@
 # ============================================================
 
 import time
-from typing import Dict, List, Set, Optional
+import os
+import cv2  # Added for image saving
+from typing import Dict, List, Set, Optional, Any # Added Any for frame
 from config.settings import SETTINGS
+from config.paths import LOG_DIR
 
 
 class PresenceManager:
@@ -23,7 +26,7 @@ class PresenceManager:
     """
 
     def __init__(self):
-        self.timeout: float = SETTINGS.get("presence_timeout", 10.0)
+        self.timeout: float = SETTINGS.get("presence_timeout", 30.0)
         self.unknown_to_outdoor: float = SETTINGS.get("unknown_to_outdoor", 10.0)
         self.room_mapping: Dict[str, str] = SETTINGS.get("room_mapping", {})
         self.default_room_name: str = SETTINGS.get(
@@ -34,7 +37,7 @@ class PresenceManager:
         self.grace_move: float = 2.5
 
         # 🔑 MINIMAL waktu agar kehadiran dianggap valid (ANTI SALAH SESUAT)
-        self.min_presence_time: float = 30.0
+        self.min_presence_time: float = 3.0
 
         # state:
         # person_id -> room_name -> {
@@ -44,6 +47,11 @@ class PresenceManager:
 
         # history logs
         self.logs: List[Dict] = []
+        
+        # Ensure snapshot directory
+        self.snap_dir = os.path.join(LOG_DIR, "snapshots")
+        if not os.path.exists(self.snap_dir):
+            os.makedirs(self.snap_dir)
 
     # ---------------------------------------------------------
     # helpers
@@ -55,14 +63,47 @@ class PresenceManager:
         if ts is None:
             return "--:--:--"
         return time.strftime("%H:%M:%S", time.localtime(ts))
+        
+    def _save_snapshot(self, person_id: str, frame):
+        """Save a snapshot for proof of presence if not exists for today."""
+        if frame is None: return
+        
+        try:
+            today = time.strftime('%Y-%m-%d')
+            user_dir = os.path.join(self.snap_dir, person_id)
+            if not os.path.exists(user_dir):
+                os.makedirs(user_dir)
+                
+            filename = os.path.join(user_dir, f"{today}.jpg")
+            
+            # Only save if not already exists (Proof of FIRST presence)
+            if not os.path.exists(filename):
+                cv2.imwrite(filename, frame)
+                print(f"[SNAPSHOT] Saved for {person_id} at {filename}")
+        except Exception as e:
+            print(f"[ERROR] Failed to save snapshot: {e}")
 
     def _print_log(self, idx: int):
         log = self.logs[idx]
-        print(
+        msg = (
             f"{idx+1}. {log['person_id']} | {log['room_id']} | "
             f"{self._fmt_time(log['in_time'])} → {self._fmt_time(log['out_time'])} | "
             f"{log['room_name']} | {log['status']}"
         )
+        print(msg)
+        
+        # WRITE TO FILE
+        # 🔥 FIX: Hanya tulis ke file jika sesi SELESAI (OUTDOOR/UNKNOWN)
+        # Ini mencegah duplikasi log pendek saat baru masuk.
+        if log['status'] != "INDOOR":
+            try:
+                # Tambahkan Tanggal [YYYY-MM-DD] untuk parsing yang lebih baik
+                file_msg = f"[{time.strftime('%Y-%m-%d')}] {msg}\n"
+                
+                with open(os.path.join(LOG_DIR, "system.log"), "a", encoding="utf-8") as f:
+                    f.write(file_msg)
+            except Exception as e:
+                print(f"[ERROR] Gagal tulis log: {e}")
 
     def _append_log(
         self,
@@ -92,22 +133,28 @@ class PresenceManager:
             return
         self.logs[idx]["out_time"] = out_time
 
-    # ---------------------------------------------------------
-    # core update
-    # ---------------------------------------------------------
-    def update_presence(self, room_id: str, active_ids: Set[str], now: float):
+    def update_presence(self, room_id: str, active_ids: Any, now: float, frame=None):
         """
         room_id   : CAM_0, CAM_1, ...
+        active_ids: Set[str] OR Dict[str, float] (Name -> Start Time)
         active_ids: set person_id hasil tracker (SUDAH STABIL)
+        frame     : current frame for snapshot (optional)
         """
 
         room_name = self._room_name(room_id)
-        active_ids = set(active_ids)
+        
+        # Handle Dict input (Retroactive) vs Set input (Legacy)
+        active_map = {}
+        if isinstance(active_ids, dict):
+            active_names = set(active_ids.keys())
+            active_map = active_ids
+        else:
+            active_names = set(active_ids)
 
         # ======================================================
         # UPDATE / CREATE STATES
         # ======================================================
-        for pid in active_ids:
+        for pid in active_names:
             rooms = self.state.setdefault(pid, {})
 
             active_room = None
@@ -122,13 +169,17 @@ class PresenceManager:
             # KASUS 1: BELUM ADA RUANG AKTIF → MASUK PENDING
             # ==================================================
             if active_room is None:
+                # 🔥 RETROACTIVE LOGIC: Use original start time if available
+                start_time = active_map.get(pid, now)
+                
                 rooms[room_name] = {
-                    "in_time": now,
-                    "last_seen": now,
+                    "in_time": start_time,
+                    "last_seen": now, # Last seen tetap NOW agar tidak timeout
                     "status": "PENDING",
                     "log_index": None,
                 }
                 continue
+
 
             # ==================================================
             # KASUS 2: MASIH DI RUANG YANG SAMA
@@ -189,6 +240,10 @@ class PresenceManager:
                         )
                         st["status"] = "INDOOR"
                         st["log_index"] = idx
+                        
+                        # SAVE SNAPSHOT (Proof of Presence)
+                        if frame is not None:
+                            self._save_snapshot(pid, frame)
 
         # ======================================================
         # TIMEOUT HANDLING

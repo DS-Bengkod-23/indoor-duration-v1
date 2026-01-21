@@ -6,8 +6,10 @@ import time
 import threading
 from config.settings import SETTINGS
 
+from config.paths import BODY_EMB_DIR
+
 class BodyRegistry:
-    def __init__(self, db_folder="data/body_embeddings"):
+    def __init__(self, db_folder=BODY_EMB_DIR):
         self.db_folder = db_folder
         self.profiles = {} 
         self.last_seen = {} 
@@ -121,7 +123,8 @@ class BodyRegistry:
 
             def _save_task(data_copy):
                 with self.save_lock: # Cegah Race Condition
-                    tmp_path = path + ".tmp"
+                    # 🔥 FIX: Use _tmp.npy so np.save doesn't add extra .npy
+                    tmp_path = path.replace(".npy", "_tmp.npy")
                     try:
                         # 🔥 ATOMIC WRITE (INDUSTRIAL STANDARD) 🛡️
                         # 1. Tulis ke file .tmp dulu (Aman kalau mati listrik tengah jalan)
@@ -145,7 +148,8 @@ class BodyRegistry:
         if len(self.profiles) == 0 or query_feat is None:
             return None, 0.0
 
-        query_feat = query_feat.flatten()
+        with self.save_lock: # 🛡️ Thread Safety Reading
+            query_feat = query_feat.flatten()
 
         norm = np.linalg.norm(query_feat)
         if norm > 0: query_feat = query_feat / norm
@@ -153,6 +157,8 @@ class BodyRegistry:
 
         best_name = None
         best_score = -1.0
+
+        candidates = []
 
         for name, gallery in self.profiles.items():
             local_max_score = 0.0
@@ -166,30 +172,64 @@ class BodyRegistry:
             
             raw_score = local_max_score
             
-            # 🔥 SOLUSI 3: HAPUS DISKON "ACTIVE USER" 🔥
-            # Jangan turunkan ke 0.60 walau aktif. Tetap di 0.72.
-            # Ini MENCEGAH teman mengambil alih ID saat Anda keluar.
-            # UPDATE: Kita turunkan ke 0.40 agar Tracker bisa mengambil keputusan sendiri
-            # (Misal untuk Same Room Handover yang butuh 0.48)
             gate_threshold = SETTINGS.get("gate_threshold_global", 0.55)
-                
             if raw_score < gate_threshold: 
                 continue 
 
             final_score = raw_score
             
             # Bonus kecil (0.05) hanya kalau skornya SANGAT TINGGI (>0.75)
-            # Artinya: "Oke kamu memang Ilham beneran, bukan teman baju mirip"
             if name in active_names and raw_score > 0.75:
                 final_score += 0.05 
             
-            if final_score > best_score:
-                best_score = final_score
-                best_name = name
+            candidates.append((final_score, name))
+
+        if not candidates: return None, 0.0
         
+        candidates.sort(key=lambda x: x[0], reverse=True)
+        
+        best_match = candidates[0]
+        best_name = best_match[1]
+        best_score = best_match[0]
+
+        # 🔥 AMBIGUITY CHECK (ANTI-SALAH ORANG v12.19) 🔥
+        # Jika Top 1 dan Top 2 bedanya kurang dari 5%, jangan tebak!
+        # Biarkan sistem menunggu wajah.
+        if len(candidates) > 1:
+            second_match = candidates[1]
+            margin = best_score - second_match[0]
+            if margin < 0.05:
+                # print(f"[AMBIGUITY REJECT] {best_name} ({best_score:.2f}) == {second_match[1]} ({second_match[0]:.2f}). Too close.")
+                return None, 0.0
+
         return best_name, best_score
+
+
 
     def update_activity(self, name):
         self.last_seen[name] = time.time()
+
+    def clear_memory(self):
+        """🔥 HARD RESET: WIPES MEMORY & DISK 🔥"""
+        print("[BodyRegistry] Wiping all memory...")
+        with self.save_lock:
+            # 1. Clear RAM
+            self.profiles.clear()
+            self.last_save_time.clear()
+            
+            # 2. Clear Disk (Delete all .npy files)
+            try:
+                folder = "data/body_embeddings"
+                if os.path.exists(folder):
+                    for filename in os.listdir(folder):
+                        if filename.endswith(".npy") or filename.endswith(".tmp"):
+                            file_path = os.path.join(folder, filename)
+                            try:
+                                os.remove(file_path)
+                                print(f"[BodyRegistry] Deleted: {filename}")
+                            except Exception as e:
+                                print(f"[BodyRegistry] Failed to delete {filename}: {e}")
+            except Exception as e:
+                print(f"[BodyRegistry] Disk wipe error: {e}")
 
 body_registry = BodyRegistry()

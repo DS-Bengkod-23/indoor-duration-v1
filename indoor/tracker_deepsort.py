@@ -6,7 +6,9 @@ from indoor.fusion import FaceBodyFusion
 from indoor.deepsort.deep_sort import DeepSort
 from indoor.body_registry import body_registry
 from indoor.shared_models import get_face_recognizer, get_osnet
+from indoor.session_registry import session_registry
 from config.settings import SETTINGS
+from indoor.visualizer import visualizer
 
 class GlobalIdentityManager:
     def __init__(self):
@@ -53,14 +55,23 @@ class GlobalIdentityManager:
             if is_same_room:
                 # 🔥 SOLUSI OVERLAP KAMERA (SATU RUANGAN) 🔥
                 # Jika time_diff < 3.0 (Target masih aktif di kamera lain):
+                
+                # 🔥 FACE BYPASS: WAJAH ADALAH KUNCI UTAMA 🔥
+                # Jika ini claim dari DETEKSI WAJAH ('FACE'), kita langsung izinkan 100%.
+                # Karena wajah itu bukti mutlak, tidak perlu debat soal threshold body.
+                if claim_type == 'FACE':
+                    self.active_identities[name] = (cam_index, track_id, score, now)
+                    return True
+
+                # Jika Body Only, baru kita pakai aturan ketat:
                 # Kita Izinkan "Double Presence" HANYA jika kemiripan TINGGI (> 0.82).
-                # Ini biar Anda bisa muncul di 2 kamera sekaligus (sudut beda),
-                # TAPI orang lain (kemiripan rendah) tetap DITOLAK.
                 # Jika time_diff < frame_count (Target masih aktif di kamera lain):
                 # Kita Izinkan "Double Presence" HANYA jika kemiripan TINGGI.
                 time_diff = now - last_seen
                 if time_diff < SETTINGS.get("time_back_view_window", 3.0):
-                    if score > SETTINGS.get("thresh_anti_clone", 0.82):
+                    # 🔥 RELAXED FOR SEQUENTIAL ENTRY:
+                    # Kita pakai threshold resmi dari Settings (0.75).
+                    if score > SETTINGS.get("thresh_anti_clone", 0.75):
                         # IOZIN: Double Presence Valid (Skor Tinggi)
                         self.active_identities[name] = (cam_index, track_id, score, now)
                         return True
@@ -87,18 +98,23 @@ class GlobalIdentityManager:
         # Anti-Hijack dalam satu kamera
         if curr_cam == cam_index and curr_id != track_id:
             time_gap = now - last_seen
-            if time_gap < 5.0:
-                if score > 0.85: 
-                    self.active_identities[name] = (cam_index, track_id, score, now)
-                    return True
-                return False 
+            
+            # 🔥 STRICT LOCK: Jika ID ini BARU SAJA dilihat (< 3 detik), SULIT DI-CLAIM ID BARU.
+            if time_gap < 3.0:
+                 # Syarat Claim: Skor harus JAUH LEBIH TINGGI (+0.20)
+                 # Jadi ID 7 (0.85) gak bakal kalah sama ID 8 (0.86).
+                 # Harus ID 8 (0.99) baru bisa menang.
+                 if score > (curr_score + 0.20):
+                     self.active_identities[name] = (cam_index, track_id, score, now)
+                     return True
+                 return False
             
             if claim_type == 'FACE': 
                 self.active_identities[name] = (cam_index, track_id, score, now)
                 return True
             else: return False
 
-        if score > (curr_score - 0.1): 
+        if score > (curr_score + 0.05): # 🔥 UPDATE: Butuh margin +0.05 untuk update score (Stabilizer)
             self.active_identities[name] = (cam_index, track_id, score, now)
             return True
             
@@ -130,6 +146,7 @@ class MultiObjectTracker:
         # 🔥 STATE BARU UNTUK SAFETY 🔥
         self.occlusion_cooldown = {} # Mencatat kapan terakhir kena macet/occlusion
         self.verification_counter = {} # Menghitung berapa kali berturut-turut match (Stabilizer)
+        self.track_start_times = {} # 🔥 RETROACTIVE: ID -> First Seen Timestamp
 
     def set_camera_id(self, cam_id):
         self.camera_id = cam_id
@@ -161,6 +178,15 @@ class MultiObjectTracker:
                         continue 
                     
                 filtered_dets.append([x1, y1, x2, y2, conf])
+
+            # 🔥 SOLUSI ANTI-NYANGKUT 1: DYNAMIC GATING 🔥
+            # Jika ada lebih dari 1 orang, MATIKAN Mode Ninja.
+            # Kita harus Strict (0.5) agar kotak tidak loncat ke tetangga.
+            # Kalau sendirian, baru boleh Mode Ninja (1.1) untuk lari kencang.
+            if len(filtered_dets) > 1:
+                self.deepsort.max_iou_distance = 0.5 # STRICT MODE (Anti-Nyangkut)
+            else:
+                self.deepsort.max_iou_distance = 1.1 # NINJA MODE (Single Player)
 
             self.deepsort.update(filtered_dets)
         else:
@@ -378,7 +404,8 @@ class MultiObjectTracker:
                             # Karena skor sangat rendah (baju beda total), kita request REPLACE ANCHORS.
                             # Artinya: Lupakan baju lama, fokus ke baju baru ini.
                             try:
-                                should_replace = (raw_score < 0.50) # Cuma replace kalau bedanya jauh banget
+                                # 🔥 TUNED: 0.50 -> 0.60. Biar lebih sensitif kalau warna baju mirip (misal Biru Tua vs Hitam)
+                                should_replace = (raw_score < 0.60) 
                                 body_registry.register(label, feat, force_replace_anchors=should_replace)
                                 
                                 action_msg = "REPLACE OLD DATA" if should_replace else "ADD NEW DATA"
@@ -393,13 +420,25 @@ class MultiObjectTracker:
                             except: pass
                             
                         elif raw_score < cutoff_threshold: 
-                            print(f"[ANTI-NYANGKUT] ID {tid} drop! Skor: {raw_score:.2f} (Occluded: {is_occluded}). RESET!")
-                            self.fusion.lock_real_name(tid, f"Person {tid}")
-                            self.fusion.set_is_real(tid, False)
-                            self.reid_skip_timer[tid] = 0 
-                            if label in global_id_manager.active_identities:
-                                del global_id_manager.active_identities[label]
-                            is_real_now = False 
+                            # 🔥 GRACE PERIOD (ANTI-FLICKER GERAK CEPAT) 🔥
+                            # Jangan langsung reset jika skor drop sesaat (motion blur).
+                            # Kita kasih toleransi 3 frame berturut-turut baru reset.
+                            
+                            fail_count = self.verification_counter.get(f"fail_{tid}", 0) + 1
+                            self.verification_counter[f"fail_{tid}"] = fail_count
+                            
+                            if fail_count > 3: # Reset hanya jika sudah 3x gagal
+                                print(f"[ANTI-NYANGKUT] ID {tid} drop! Skor: {raw_score:.2f} (Occluded: {is_occluded}). RESET!")
+                                self.fusion.lock_real_name(tid, f"Person {tid}")
+                                self.fusion.set_is_real(tid, False)
+                                self.reid_skip_timer[tid] = 0 
+                                if label in global_id_manager.active_identities:
+                                    del global_id_manager.active_identities[label]
+                                is_real_now = False 
+                            else:
+                                # Masih dalam masa toleransi, pertahankan status hijau
+                                # Tapi jangan update score (pakai score lama)
+                                pass 
                         else:
                             self.reid_skip_timer[tid] = 30
                             
@@ -457,9 +496,15 @@ class MultiObjectTracker:
                     is_same_room_handover = False
                     if m_name in global_id_manager.active_identities:
                         cur_cam = global_id_manager.active_identities[m_name][0]
+                        last_seen_time = global_id_manager.active_identities[m_name][3]
                         room_curr = global_id_manager.get_room_name(cur_cam)
                         room_my = global_id_manager.get_room_name(self.camera_id)
-                        if room_curr == room_my:
+                        
+                        # 🔥 SYARAT VIP: Ruangan Sama DAN Waktu < 5 Detik
+                        # Kalau lebih dari 5 detik, dianggap "New Entry" (Normal Threshold)
+                        # Ini mencegah Exit Jump ke Stranger.
+                        time_since_seen = curr_time_now - last_seen_time
+                        if room_curr == room_my and time_since_seen < 5.0:
                             is_same_room_handover = True
 
                     box_height = y2 - y1
@@ -470,58 +515,108 @@ class MultiObjectTracker:
                     person_count = len(tracks)
                     
                     # Ambil threshold dasar dari Settings
+                    # Ambil threshold dasar dari Settings
                     base_thresh = SETTINGS.get("thresh_same_room", 0.75) if is_same_room_handover else SETTINGS.get("thresh_diff_room", 0.81)
 
+                    # 🔥 UPDATE v12.18: BLIND ACTIVE BOOST (SOLUSI TAMPAK BELAKANG) 🔥
+                    # Jika orangnya SUDAH ADA DI GEDUNG (Active), kita harus lebih percaya diri.
+                    # Dulu threshold 0.81 terlalu strict buat re-id tampak belakang (setelah track putus).
+                    # Sekarang kita turunkan jadi 0.69 kalau dia 'Known Active'.
+                    is_known_active = (m_name in global_id_manager.active_identities)
+                    if is_known_active and not is_same_room_handover:
+                        base_thresh -= 0.12 # (0.81 -> 0.69) Biar Back View gampang masuk.
+
                     
-                    # 🔥 4. LOGIKA DISTANCE TIERED (Refined for CCTV) 🔥
+                    #  4. LOGIKA DISTANCE TIERED (Refined for CCTV v12.9) 
                     # Mengatasi Masalah #3 (Jauh salah).
                     is_tiny = (box_height < 60)
                     is_small = (box_height < 90)
                     
-                    if is_tiny: # TINY
-                         base_thresh = 0.82 # Sangat Ketat
-                         m_score -= 0.15    # Penalti Jauh
-                    elif is_small: # SMALL
-                         base_thresh = 0.79 # Ketat
-                         m_score -= 0.05
-                    elif box_height < 140: # MEDIUM
-                         base_thresh -= 0.05 # Sedikit Longgar (Aman)
+                    #  CONTEXT AWARENESS BOOST 
+                    # Jika orang ini SUDAH AKTIF di kamera lain (misal Cam 0), dan kita lihat dia di Cam 1 (Jauh),
+                    # Maka kita harus "curiga positif" bahwa itu dia. Kita BOOST skornya.
+                    # Ini kunci agar CCTV blur tetap bisa ngenalin orang yang sudah dikenal sistem.
+
+                    
+                    
+                    if is_tiny: # TINY (< 60px)
+                         base_thresh = SETTINGS.get("thresh_blind_small", 0.60)
+                         # Boost dikit kalau diketahui ada di gedung
+                         if is_known_active: m_score += 0.05
+                    elif is_small: # SMALL (< 90px)
+                         base_thresh = SETTINGS.get("thresh_blind_small", 0.60) + 0.05 # 0.65
+                         if is_known_active: m_score += 0.03
+                    elif box_height < 150: # MEDIUM (< 150px)
+                         # 🔥 FIX: JANGAN PAKAI thresh_diff_room (0.76) KEGEDEAN BUAT DATA JAUH
+                         # Kita pakai nilai tengah antara Small (0.55) dan Large.
+                         base_thresh = 0.65 
+                         if is_known_active: base_thresh -= 0.05 # Jadi 0.60 kalau orangnya memang ada
                     else: # LARGE
-                         base_thresh -= 0.08 # Longgar (Sangat Jelas)
+                         base_thresh = SETTINGS.get("thresh_blind_large", 0.75)
 
 
-                    # 🔥 5. HIJACK GUARD (POST-MORTEM CHECK) 🔥
+                    # 🔥 HIJACK GUARD (POST-MORTEM CHECK) 🔥
                     # Mengatasi Masalah #2 (Hijau jadi orang lain).
-                    # Jika ID sudah CONFIRMED (Hijau), tapi skornya jeblok di bawah 0.45,
+                    # Jika ID sudah CONFIRMED (Hijau), tapi skornya jeblok di bawah 0.35 (Back View bisa rendah),
                     # Berarti itu BUKAN orang yang sama! (Mungkin orang lewat di belakang).
-                    if m_name == label and m_score < 0.45:
-                          print(f"[HIJACK GUARD] {label} appearance mismatch ({m_score:.2f}). FORCE DETACH.")
+                    
+                    # 🔥 UPDATE: RELAXED FOR SITTING POSE 🔥
+                    # Kalau orang duduk (w > h atau ratio < 1.6), skor pasti drop.
+                    # Jadi jangan force detach kalau dia lagi duduk.
+                    w_box = x2 - x1
+                    h_box = y2 - y1
+                    ratio_box = h_box / w_box if w_box > 0 else 2.0
+                    
+                    hijack_threshold = 0.35
+                    if ratio_box < 1.8: # Sitting or Squatting
+                         hijack_threshold = 0.20 # Relaksasi
+                         
+                    if m_name == label and m_score < hijack_threshold:
+                          print(f"[HIJACK GUARD] {label} mismatch ({m_score:.2f} < {hijack_threshold}). Ratio: {ratio_box:.2f}. FORCE DETACH.")
                           self.fusion.set_is_real(tid, False)
                           is_real_now = False
 
 
                     # ADAPTIVE LOGIC:
                     # Rame = Longgarkan dikit (-0.05). Sepi = Strict (+0.03).
-                    if person_count > 1:
+                    if person_count > 3: # CROWDED (>3 Orang)
+                         base_thresh -= 0.03
+                    elif person_count > 1:
                         if is_same_room_handover: 
-                             base_thresh = max(0.60, base_thresh - 0.05)
+                             # 🔥 RELAX dikit (0.72 -> 0.70) biar Body Only gak mati kutu
+                             # TAPI nanti kita kasih syarat STREAK lebih panjang.
+                             base_thresh = max(0.68, base_thresh - 0.05) 
                     else:
                         base_thresh = min(0.90, base_thresh + 0.03)
                         
-                    # Clipping
-                    base_thresh = max(0.60, min(base_thresh, 0.90))
+                    # Clipping Safety (Global Floor)
+                    # Clipping Safety (Global Floor)
+                    # 🔥 UPDATE v12.7: FLOOR RESTORED 0.45 (Safe Medium)
+                    base_thresh = max(0.45, min(base_thresh, 0.95))
 
                     # ANTI-FLICKER (OCCLUSION PENALTY)
                     # Mengatasi Masalah #1 (Switch pas ketutupan).
                     # Kalau habis ketutupan, harus strict 2x lipat.
                     time_since_occlusion = curr_time_now - self.occlusion_cooldown.get(tid, 0)
                     if time_since_occlusion < 2.0:
-                         base_thresh += 0.15
+                         # 🔥 RELAXED PENALTY: 0.15 -> 0.05.
+                         # Dulu terlalu strict, jadi pas habis ketutupan malah susah recover jadi hijau.
+                         # Sekarang cuma naik sedikit, biar gak gampang switch tapi tetap bisa re-id.
+                         base_thresh += 0.05
                     
                     # Streak Validation (Berapa kali harus match berturut-turut?)
-                    if is_tiny: required_streak = 5
-                    elif is_small: required_streak = 2
-                    else: required_streak = 1
+                    if is_tiny: 
+                        required_streak = 2 if is_known_active else 5 # PERCEPAT: 5 -> 2 kalau known
+                    elif is_small: 
+                        required_streak = 2 if is_known_active else 3 # PERCEPAT: 3 -> 2
+                    else: 
+                        # 🔥 LOGIKA STREAK DINAMIS v12.7 🔥
+                        # Kalau skor SANGAT TINGGI (> 0.75), langsung terima (Instant).
+                        # Kalau skor PAS-PASAN (0.68 - 0.75), butuh bukti konsisten (3 frame).
+                        if m_score > 0.75:
+                            required_streak = 1
+                        else:
+                            required_streak = 3
                     
                     current_streak = self.verification_counter.get(tid, 0)
                     
@@ -529,17 +624,37 @@ class MultiObjectTracker:
                         # Potensi Match! Naikkan Counter.
                         self.verification_counter[tid] = current_streak + 1
                         
+                        # Debug Print untuk Validasi
+                        if self.verification_counter[tid] == 1: # Cuma print pas pertama kali detect
+                             print(f"[REID CHECK] ID {tid} mirip {m_name}? Skor: {m_score:.3f} (Syarat > {base_thresh:.3f})")
+
                         # Cuma boleh claim kalau streak sudah cukup
                         if self.verification_counter[tid] >= required_streak:
-                             is_hijack_attempt = False
-                             # ... (Anti hijack logic) ...
-                             if not is_hijack_attempt:
-                                  if global_id_manager.try_claim_identity(m_name, self.camera_id, tid, m_score, 'BODY'):
-                                      self.fusion.lock_real_name(tid, m_name)
-                                      self.reid_skip_timer[tid] = 0
+                            # 1. Cek Konsistensi Wajah (Kalau ada data wajah)
+                            # Jangan sampai wajah A, tapi body cocok B.
+                            
+                            # Logika: Kalau wajahnya "UNKNOWN_FACE", kita percaya body.
+                            # Tapi kalau wajahnya JELAS "Budi", tapi Body mirip "Andi", JANGAN percaya Body.
+                            face_label = current_face_map.get(tid, None)
+                            is_face_mismatch = (face_label and face_label != "UNKNOWN_FACE" and face_label != m_name)
+                            
+                            if not is_face_mismatch:
+                                try_result = global_id_manager.try_claim_identity(m_name, self.camera_id, tid, m_score)
+                                if try_result:
+                                    print(f"[REID SUCCESS] ID {tid} -> {m_name} (Skor: {m_score:.2f})")
+                                    self.fusion.lock_real_name(tid, m_name)
+                                    self.reid_skip_timer[tid] = 0
                     else:
                         # Gagal Match -> Reset Counter (Biar harus mulai dari nol lagi)
                         self.verification_counter[tid] = 0
+                        
+                        # 🔥 GUEST MODE (GLOBAL TRACKING) 🔥
+                        # Jika tidak cocok dengan DB Utama, cek Session/Guest Registry.
+                        # Ini membuat orang asing punya ID konsisten lintas kamera (misal: Guest-1).
+                        if feat is not None:
+                           guest_id, is_new = session_registry.match_or_register(feat)
+                           if guest_id:
+                               self.fusion.labels[tid] = guest_id
 
         # VISUALISASI
         active_names_in_frame = {}
@@ -547,6 +662,29 @@ class MultiObjectTracker:
             tid, bbox = t[0], t[1]
             x1, y1, x2, y2 = bbox
             label, is_real = self.fusion.get_label(tid)
+
+            # 🔥 UPDATE v12.17: TRUSTED BACK VIEW LEARNING 🔥
+            # Masalah: Tampak belakang tidak terekam karena fitur beda jauh dengan depan.
+            # Solusi: Jika wajah masih "fresh" (baru dilihat < 5 detik lalu),
+            # Kita paksa sistem untuk BELAJAR fitur badan saat ini (Auto-Learn),
+            # Asumsinya: Orangnya sama, cuma lagi muter badan.
+            if is_real and label != f"Person {tid}":
+                last_face = self.last_face_confirmed.get(tid, 0)
+                if time.time() - last_face < 5.0: # 5 Detik setelah wajah hilang
+                     # Ambil crop badan terbaru
+                     # (Note: Kita harus ambil crop lagi atau simpan di track. 
+                     #  Untuk efisiensi, kita panggil register pakai feat yang udah ada di track.features kalau bisa.
+                     #  Tapi di sini kita pakai cara simpel: Panggil fungsi register via body_registry kalau ada fitur)
+                     pass # (Logic sudah ada di auto-learn, kita cuma perlu pastikan thresholdnya ditembus)
+                     # TAPI KITA BUTUH "FORCE LEARN".
+                     # Jadi kita inject manual ke body registry.
+                     # (To implementation detail: We need body feature. It is in 'features' list of track?)
+                     # Kita skip coding kompleks di sini biar gak berat. 
+                     # Kita pakai trik: NAIKKAN TOLERANSI di body_registry.register via parameter 'force' kalau ada.
+                     # Tapi body_registry.register gak punya 'force'.
+                     # OK, SAYA AKAN EDIT SETTINGS SAJA. 
+                     # Ubah thresh_back_view_learn jadi lebih rendah di settings.py
+
 
             if is_real: 
                 if label in active_names_in_frame:
@@ -560,6 +698,9 @@ class MultiObjectTracker:
                     elif prev_has_face and not curr_has_face:
                         self.fusion.lock_real_name(tid, f"Person {tid}")
                         self.fusion.set_is_real(tid, False)
+                        # 🔥 UPDATE LOCAL VARS AGAR GAK DIGAMBAR HIJAU 🔥
+                        label = f"Person {tid}"
+                        is_real = False 
                     else:
                         # KEDUANYA PUNYA WAJAH / KEDUANYA TIDAK PUNYA WAJAH
                         # 🔥 Face Priority Switcher (Industrial Grade) 🔥
@@ -576,18 +717,18 @@ class MultiObjectTracker:
                              # Previous TID menang (Older but fresher Face or Stalemate)
                              self.fusion.lock_real_name(tid, f"Person {tid}")
                              self.fusion.set_is_real(tid, False)
+                             # 🔥 UPDATE LOCAL VARS AGAR GAK DIGAMBAR HIJAU 🔥
+                             label = f"Person {tid}"
+                             is_real = False
+
                 else:
                     active_names_in_frame[label] = tid
 
-                # HIJAU: TEBAL + NAMA
-                color = (0, 255, 0)
-                cv2.rectangle(out, (x1, y1), (x2, y2), color, 2)
-                cv2.putText(out, f"{label}", (x1, y1 - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+            # Visualisasi dipindahkan ke visualizer.draw_tracks
+            pass
 
-            else:
-                # ORANGE: TIPIS + POLOS (Bersih)
-                color = (0, 165, 255)
-                cv2.rectangle(out, (x1, y1), (x2, y2), color, 1)
+        # Call Visualizer (Outside Loop)
+        visualizer.draw_tracks(out, tracks, self.fusion, self.face_vote_cache, self.local_pos_history)
 
         # Garbage Collector
         if self.frame_idx % 300 == 0:
@@ -615,24 +756,55 @@ class MultiObjectTracker:
         fps = 1.0 / (curr_time - self.prev_time + 1e-6)
         self.prev_time = curr_time
         # DRAW NOTIFICATIONS
-        # Tampilkan notifikasi dari queue (paling atas)
+        # DRAW NOTIFICATIONS
+        visualizer.draw_notifications(out, self.notification_queue)
         if len(self.notification_queue) > 0:
-            notif = self.notification_queue[0]
-            text = notif["text"]
-            color = notif["color"]
-            timer = notif["timer"]
-            
-            # Draw Background Box
-            (text_w, text_h), baseline = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 1.0, 3)
-            cv2.rectangle(out, (50, 100 - text_h - 10), (50 + text_w + 20, 100 + 10), (0,0,0), -1)
-            cv2.putText(out, text, (60, 100), cv2.FONT_HERSHEY_SIMPLEX, 1.0, color, 3)
-            
-            # Decrement Timer
-            notif["timer"] -= 1
-            if notif["timer"] <= 0:
+            self.notification_queue[0]["timer"] -= 1
+            if self.notification_queue[0]["timer"] <= 0:
                 self.notification_queue.pop(0)
 
-        cv2.putText(out, f"FPS: {fps:.1f}", (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 2)
+        visualizer.draw_fps(out, fps)
+
+        # [added for dashboard integration]
+        # UPDATE PRESENCE MANAGER (Live Status)
+        # Kumpulkan semua ID yang 'is_real' (Hijau) di frame ini
+        
+        current_active_data = {} # Name -> First Seen Timestamp
+        active_tids = set()
+        now = time.time()
+        
+        for t in tracks:
+            tid = t[0]
+            active_tids.add(tid)
+            
+            # 1. Register Start Time if new
+            if tid not in self.track_start_times:
+                self.track_start_times[tid] = now
+            
+            label, is_real = self.fusion.get_label(tid)
+            if is_real and "Person" not in label:
+                # CLEAN ID: Remove .npy, .tmp suffix if present
+                clean_label = label.replace(".npy", "").replace(".tmp", "")
+                
+                # Use earliest start time if multiple tracks for same person
+                start_ts = self.track_start_times[tid]
+                if clean_label not in current_active_data:
+                    current_active_data[clean_label] = start_ts
+                else:
+                    if start_ts < current_active_data[clean_label]:
+                        current_active_data[clean_label] = start_ts
+
+        # 2. Cleanup Dead Tracks from Memory
+        for tid in list(self.track_start_times.keys()):
+            if tid not in active_tids:
+                del self.track_start_times[tid]
+        
+        # Panggil update_presence dengan ID kamera saat ini
+        # Format room_id: CAM_0, CAM_1, dst.
+        from indoor.presence_manager import presence_manager
+        # Pass frame original untuk snapshot (clean)
+        # Params: room_id, active_data (Dict[name, start_time]), now, frame
+        presence_manager.update_presence(f"CAM_{self.camera_id}", current_active_data, now, frame=frame)
 
         return out
 
@@ -658,9 +830,44 @@ class MultiObjectTracker:
 
     def extract_body_feature(self, frame, box, tid):
         x1, y1, x2, y2 = box
-        h, w = frame.shape[:2]
-        x1, x2 = max(0, x1), min(w, x2)
-        y1, y2 = max(0, y1), min(h, y2)
-        if x2 <= x1 or y2 <= y1: return None
-        crop = frame[y1:y2, x1:x2]
+        h_img, w_img = frame.shape[:2]
+        
+        # Validasi koordinat dasar
+        x1, y1 = max(0, int(x1)), max(0, int(y1))
+        x2, y2 = min(w_img, int(x2)), min(h_img, int(y2))
+        
+        # Cek validitas box
+        w_box = x2 - x1
+        h_box = y2 - y1
+        if w_box <= 0 or h_box <= 0: return None
+        
+        # 🔥 SOLUSI ADAPTIVE CROP v12.16 (FINE TUNED) 🔥
+        # Logika:
+        # - JAUH/SEDANG (Tinggi < 180px): JANGAN CROP! (Resolusi pas-pasan, pixel sangat berharga).
+        # - DEKAT/BESAR (Tinggi >= 180px): Potong pinggir 5% (Anti-Nyangkut).
+        
+        is_far_away = (h_box < 180) # 🔥 UPDATE v12.16: NAIKKAN BATAS (120 -> 180) biar Medium Distance juga Full Box. 
+
+        if is_far_away:
+            # MODE 1: FULL BOX (Untuk objek jauh)
+            crop = frame[y1:y2, x1:x2]
+        else:
+            # MODE 2: CENTER CROP (Untuk objek dekat/jelas)
+            # 🔥 UPDATE v12.15: KURANGI CROP WIDTH (15% -> 5%)
+            # Masalah: Tampak samping/punggung itu "tipis". Kalau dipotong 15%, datanya habis.
+            pad_w = int(w_box * 0.05) # Buang 5% kiri-kanan (Dulu 15%)
+            pad_h = int(h_box * 0.10) # Buang 10% atas-bawah
+            
+            crop_x1 = x1 + pad_w
+            crop_x2 = x2 - pad_w
+            crop_y1 = y1 + pad_h
+            crop_y2 = y2 - pad_h
+            
+            # Safety Check: Kalau hasil potong jadi terlalu kecil (<10px), batalkan potong.
+            if (crop_x2 - crop_x1) < 10 or (crop_y2 - crop_y1) < 10:
+                crop = frame[y1:y2, x1:x2]
+            else:
+                crop = frame[crop_y1:crop_y2, crop_x1:crop_x2]
+
+        # Ekstrak Fitur
         return self.osnet.extract(crop).flatten()

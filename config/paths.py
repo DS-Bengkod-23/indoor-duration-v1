@@ -9,7 +9,7 @@ MODEL_DIR = os.path.join(ROOT, "models")
 # Data directories
 EMBED_DIR      = os.path.join(ROOT, "data", "embeddings")        # face
 BODY_EMB_DIR   = os.path.join(ROOT, "data", "body_embeddings")   # body (OSNet)
-LOG_DIR        = os.path.join(ROOT, "data", "logs")
+LOG_DIR        = os.path.join(ROOT, "logs")
 
 # Model files (YuNet + YOLO + OSNet)
 YUNET_ONNX = os.path.join(MODEL_DIR, "face_detection_yunet_2023mar.onnx")

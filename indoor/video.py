@@ -9,6 +9,7 @@ from config.paths import get_data_paths
 from indoor.tracker_deepsort import MultiObjectTracker
 from indoor.body_registry import body_registry
 from indoor.smart_camera import SmartVideoCapture # 🔥 MODUL BARU
+from indoor.visualizer import visualizer
 
 class VideoSystem:
     def __init__(self, max_cameras=1):
@@ -40,82 +41,110 @@ class VideoSystem:
         print("[SYSTEM] Tekan 'r' untuk REGISTRASI WAJAH & BADAN.")
         print("[SYSTEM] Tekan 'x' untuk RESET DARURAT.") 
 
+    def find_user_cameras(self, target_name):
+        """
+        Mengembalikan daftar index kamera di mana user tersebut terdeteksi.
+        """
+        active_cams = []
+        for i, tracker in enumerate(self.trackers):
+            tracks = tracker.deepsort.get_active_tracks(with_feature=False)
+            for t in tracks:
+                tid = t[0]
+                name, is_real = tracker.fusion.get_label(tid)
+                if is_real and name == target_name:
+                    active_cams.append(i)
+                    break 
+        return active_cams
+
     def run(self):
-        while self.running:
-            frames = []
-            raw_frames = [] 
-            
-            for i, cap in enumerate(self.caps):
-                try:
-                    ret, frame = cap.read()
-                    
-                    if not ret:
-                        time.sleep(0.1)
-                        frame = np.zeros((480, 640, 3), dtype=np.uint8)
-                    
-                    # 🔥 FIX LIGHTING (REAL-LIFE CCTV) 🔥
-                    # Gunakan CLAHE untuk perbaiki kontras di lorong gelap/silau.
+        try:
+            while self.running:
+                frames = []
+                raw_frames = [] 
+                
+                for i, cap in enumerate(self.caps):
                     try:
-                        lab = cv2.cvtColor(frame, cv2.COLOR_BGR2LAB)
-                        l, a, b = cv2.split(lab)
-                        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
-                        cl = clahe.apply(l)
-                        limg = cv2.merge((cl, a, b))
-                        frame = cv2.cvtColor(limg, cv2.COLOR_LAB2BGR)
-                    except: pass # Safety kalau format pixel aneh
+                        ret, frame = cap.read()
+                        
+                        if not ret:
+                            time.sleep(0.1)
+                            frame = np.zeros((480, 640, 3), dtype=np.uint8)
+                        
+                        # 🔥 FIX LIGHTING (REAL-LIFE CCTV) 🔥
+                        # Gunakan CLAHE untuk perbaiki kontras di lorong gelap/silau.
+                        try:
+                            lab = cv2.cvtColor(frame, cv2.COLOR_BGR2LAB)
+                            l, a, b = cv2.split(lab)
+                            # 🔥 UPDATE v12.13: TURUNKAN CLAHE (2.0 -> 1.1) 🔥
+                            # Masalah: User lapor ada "cahaya" (halo) di sekeliling orang.
+                            # Ini karena CLAHE terlalu kuat. Kita buat halus saja.
+                            clahe = cv2.createCLAHE(clipLimit=1.1, tileGridSize=(8,8))
+                            cl = clahe.apply(l)
+                            limg = cv2.merge((cl, a, b))
+                            frame = cv2.cvtColor(limg, cv2.COLOR_LAB2BGR)
+                        except: pass # Safety kalau format pixel aneh
 
-                    # Resize ringan (Kunci FPS Tinggi)
-                    frame = cv2.resize(frame, SETTINGS["face_input_size"])
-                    
-                    # Simpan RAW
-                    raw_frames.append(frame.copy()) 
-                    
-                    # PROSES TRACKING
-                    processed_frame = self.trackers[i].process_frame(frame)
-                    
-                    cv2.putText(processed_frame, f"CAM {i}", (10, 20), 
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
-                    
-                    frames.append(processed_frame)
-                except Exception as e:
-                    from indoor.utils import logger
-                    logger.error(f"[CRASH GUARD] Error di Cam {i}: {e}. Skipping frame.")
-                    
-                    # 🔥 FIX: Gunakan ukuran dari Settings agar Grid tidak Crash
-                    target_w, target_h = SETTINGS["face_input_size"]
-                    # Ingat: Numpy shape itu (Height, Width, Channel)
-                    frames.append(np.zeros((target_h, target_w, 3), dtype=np.uint8))
+                        # Resize ringan (Kunci FPS Tinggi)
+                        frame = cv2.resize(frame, SETTINGS["face_input_size"])
+                        
+                        # Simpan RAW
+                        raw_frames.append(frame.copy()) 
+                        
+                        # PROSES TRACKING
+                        processed_frame = self.trackers[i].process_frame(frame)
+                        
+                        visualizer.draw_cam_id(processed_frame, i)
+                        
+                        frames.append(processed_frame)
+                    except Exception as e:
+                        from indoor.utils import logger
+                        logger.error(f"[CRASH GUARD] Error di Cam {i}: {e}. Skipping frame.")
+                        
+                        # 🔥 FIX: Gunakan ukuran dari Settings agar Grid tidak Crash
+                        target_w, target_h = SETTINGS["face_input_size"]
+                        # Ingat: Numpy shape itu (Height, Width, Channel)
+                        frames.append(np.zeros((target_h, target_w, 3), dtype=np.uint8))
+                        # Dont forget placeholders for raw_frames
+                        if len(raw_frames) <= i:
+                            raw_frames.append(np.zeros((target_h, target_w, 3), dtype=np.uint8))
 
-            # Tampilkan Grid
-            if len(frames) == 1:
-                grid = frames[0]
-            elif len(frames) == 2:
-                grid = np.hstack(frames)
-            else:
-                top = np.hstack(frames[:2])
-                if len(frames) == 3:
-                    bottom = np.hstack([frames[2], np.zeros_like(frames[0])])
+                # Tampilkan Grid
+                if len(frames) == 1:
+                    grid = frames[0]
+                elif len(frames) == 2:
+                    grid = np.hstack(frames)
                 else:
-                    bottom = np.hstack(frames[2:4])
-                grid = np.vstack([top, bottom])
+                    top = np.hstack(frames[:2])
+                    if len(frames) == 3:
+                        bottom = np.hstack([frames[2], np.zeros_like(frames[0])])
+                    else:
+                        bottom = np.hstack(frames[2:4])
+                    grid = np.vstack([top, bottom])
 
-            cv2.imshow("Multi-Camera Grid View", grid)
+                # Callback Hook for Web Dashboard
+                if hasattr(self, "on_frame_callback") and self.on_frame_callback:
+                    # Update signature to pass frames (annotated) list too
+                    self.on_frame_callback(grid, frames)
 
-            # KEYBOARD HANDLER
-            key = cv2.waitKey(1) & 0xFF
-            
-            if key == ord('q'):
-                self.stop()
-            
-            elif key == ord('r'):
-                # Tidak perlu pause di sini, biar handle_registration yang ngatur
-                if len(raw_frames) > 0:
-                    self.handle_registration(raw_frames[0], self.trackers[0])
+                cv2.imshow("Multi-Camera Grid View", grid)
 
-            elif key == ord('x'):
-                print("\n[USER COMMAND] Melakukan Reset Darurat...")
-                for tracker in self.trackers:
-                    tracker.emergency_reset()
+                # KEYBOARD HANDLER
+                key = cv2.waitKey(1) & 0xFF
+                
+                if key == ord('q'):
+                    self.running = False
+                
+                elif key == ord('r'):
+                    # Tidak perlu pause di sini, biar handle_registration yang ngatur
+                    if len(raw_frames) > 0:
+                        self.handle_registration(raw_frames[0], self.trackers[0])
+
+                elif key == ord('x'):
+                    print("\n[USER COMMAND] Melakukan Reset Darurat...")
+                    for tracker in self.trackers:
+                        tracker.emergency_reset()
+        finally:
+            self.stop()
 
     def handle_registration(self, raw_frame, tracker):
         # --- LANGKAH 1: Cari Track Aktif Terbesar ---
