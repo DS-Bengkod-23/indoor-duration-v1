@@ -36,9 +36,10 @@ class Visualizer:
                 cv2.rectangle(frame, (x1, y1), (x2, y2), color, thickness)
                 
                 # Gambar Label Background biar jelas
-                (text_w, text_h), baseline = cv2.getTextSize(label, self.font, 0.6, 2)
+                display_text = f"{label} (ID: {tid})"
+                (text_w, text_h), baseline = cv2.getTextSize(display_text, self.font, 0.6, 2)
                 cv2.rectangle(frame, (x1, y1 - text_h - 10), (x1 + text_w, y1), color, -1)
-                cv2.putText(frame, f"{label}", (x1, y1 - 5), self.font, 0.6, self.black, 2)
+                cv2.putText(frame, display_text, (x1, y1 - 5), self.font, 0.6, self.black, 2)
             elif "Guest-" in label:
                 # CYAN: GUEST MODE (Unknown but Linked)
                 color = (255, 255, 0) # Cyan

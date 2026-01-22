@@ -13,7 +13,7 @@ class BodyRegistry:
         self.db_folder = db_folder
         self.profiles = {} 
         self.last_seen = {} 
-        self.last_save_time = {} # 🔥 Track waktu simpan terakhir 
+        self.last_save_time = {} #  Track waktu simpan terakhir 
         self.save_lock = threading.Lock() # 🛡️ Industrial Grade: Thread Safety Lock 
         
         if not os.path.exists(self.db_folder):
@@ -23,7 +23,7 @@ class BodyRegistry:
         self.load()
 
     def clear_memory(self):
-        """🔥 HARD RESET: Lupakan semua data di RAM 🔥"""
+        """ HARD RESET: Lupakan semua data di RAM """
         self.profiles = {}
         self.last_seen = {}
         print("[BodyRegistry] MEMORY WIPED! Semua data lilt-lilt hilang.")
@@ -36,7 +36,7 @@ class BodyRegistry:
                 name = os.path.splitext(f)[0]
                 path = os.path.join(self.db_folder, f)
                 
-                # 🔥 AUTO-CLEANUP: Hapus hanya jika data > 18 Jam (Ganti Hari) 🔥
+                #  AUTO-CLEANUP: Hapus hanya jika data > 18 Jam (Ganti Hari) 
                 # Biar kalau restart komputer di hari yang sama, data tidak hilang.
                 try:
                     file_time = os.path.getmtime(path)
@@ -75,7 +75,7 @@ class BodyRegistry:
         if name not in self.profiles:
             self.profiles[name] = []
             
-        # 🔥 SMART ANCHOR REPLACEMENT (New Outfit) 🔥
+        #  SMART ANCHOR REPLACEMENT (New Outfit) 
         # Jika ganti baju, kita RESET total history lama.
         # Biar baju lama (yang mungkin mirip teman) tidak disimpan lagi.
         if force_replace_anchors:
@@ -90,19 +90,15 @@ class BodyRegistry:
         
         if not is_duplicate:
             self.profiles[name].append(feature)
-            if len(self.profiles[name]) > 15:
-                # 🔥 STRATEGI ANTI-DATA KOTOR (ANCHOR) 🔥
+            if len(self.profiles[name]) > 50:
+                #  STRATEGI ANTI-DATA KOTOR (ANCHOR) 
                 # Kita JANGAN hapus data awal (index 0). Itu biasanya data registrasi paling murni/bagus.
                 # Kita hapus data "tengah" (index 5) yang merupakan hasil auto-learn terlama.
                 # Jadi: Index 0-4 (5 data pertama) ABADI (Safe Zone).
-                #       Index 5-15 (10 data) adalah memori jangka pendek yang berputar.
+                #       Index 5-50 adalah memori jangka panjang yang berputar.
                 self.profiles[name].pop(5)
         
-        # Simpan ke disk (Lazy Save Strategy)
-        # Jangan simpan setiap frame! Berat!
-        # Simpan cuma kalau:
-        # 1. Data masih dikit (< 3) -> Penting buat inisialisasi
-        # 2. Atau sudah > 15 detik berlalu sejak simpan terakhir
+   
         
         curr_time = time.time()
         last_save = self.last_save_time.get(name, 0)
@@ -126,7 +122,7 @@ class BodyRegistry:
                     # 🔥 FIX: Use _tmp.npy so np.save doesn't add extra .npy
                     tmp_path = path.replace(".npy", "_tmp.npy")
                     try:
-                        # 🔥 ATOMIC WRITE (INDUSTRIAL STANDARD) 🛡️
+                        #  ATOMIC WRITE (INDUSTRIAL STANDARD) 🛡️
                         # 1. Tulis ke file .tmp dulu (Aman kalau mati listrik tengah jalan)
                         np.save(tmp_path, np.array(data_copy))
                         # 2. Rename cepat (Atomic Operation)
@@ -192,7 +188,7 @@ class BodyRegistry:
         best_name = best_match[1]
         best_score = best_match[0]
 
-        # 🔥 AMBIGUITY CHECK (ANTI-SALAH ORANG v12.19) 🔥
+        # AMBIGUITY CHECK (ANTI-SALAH ORANG v12.19) 
         # Jika Top 1 dan Top 2 bedanya kurang dari 5%, jangan tebak!
         # Biarkan sistem menunggu wajah.
         if len(candidates) > 1:
@@ -210,7 +206,7 @@ class BodyRegistry:
         self.last_seen[name] = time.time()
 
     def clear_memory(self):
-        """🔥 HARD RESET: WIPES MEMORY & DISK 🔥"""
+        """ HARD RESET: WIPES MEMORY & DISK """
         print("[BodyRegistry] Wiping all memory...")
         with self.save_lock:
             # 1. Clear RAM
