@@ -1,5 +1,6 @@
 # indoor/tracker_deepsort.py
 import cv2, time, numpy as np
+import threading # 🔥 THREAD SAFETY
 from indoor.face_detector import FaceDetectorYuNet
 from indoor.person_detector import PersonDetectorYOLO
 from indoor.fusion import FaceBodyFusion
@@ -14,8 +15,10 @@ class GlobalIdentityManager:
     def __init__(self):
         self.active_identities = {} 
         self.room_mapping = SETTINGS.get("room_mapping", {})
+        self.lock = threading.Lock() # 🛡️ Industrial Grade Thread Safety
 
     def get_room_name(self, cam_index):
+        # Read-only dari config, gak perlu lock strict, tapi access dictionary aman in Python.
         key = f"CAM_{cam_index}"
         # UPDATE: USER CONFIRM "MASIH SATU RUANGAN" 
         # Jadi default-nya kita anggap SATU RUANGAN BESAR (Shared).
@@ -25,21 +28,31 @@ class GlobalIdentityManager:
     def get_active_names_list(self):
         now = time.time()
         active = []
-        for name, data in self.active_identities.items():
-            last_seen = data[3]
-            # Ingatan global 15 detik biar handover antar kamera santai
-            if now - last_seen < 15.0: 
-                active.append(name)
+        with self.lock: # 🛡️ Safe Reading
+            for name, data in self.active_identities.items():
+                last_seen = data[3]
+                # Ingatan global 15 detik biar handover antar kamera santai
+                if now - last_seen < 15.0: 
+                    active.append(name)
         return active
+
+    def is_identity_verified(self, name):
+        """
+        Check if identity is currently active/known in the session.
+        Digunakan untuk 'Fast-ID' (Re-entry).
+        """
+        with self.lock:
+            return name in self.active_identities
 
     def try_claim_identity(self, name, cam_index, track_id, score, claim_type='BODY'):
         now = time.time()
         
-        if name not in self.active_identities:
-            self.active_identities[name] = (cam_index, track_id, score, now)
-            return True
+        with self.lock: # 🛡️ Safe Writing (CRITICAL SECTION)
+            if name not in self.active_identities:
+                self.active_identities[name] = (cam_index, track_id, score, now)
+                return True
         
-        curr_cam, curr_id, curr_score, last_seen = self.active_identities[name]
+            curr_cam, curr_id, curr_score, last_seen = self.active_identities[name]
         
         # Cek Kesamaan Ruangan
         room_curr = self.get_room_name(curr_cam)
@@ -96,22 +109,25 @@ class GlobalIdentityManager:
             time_gap = now - last_seen
             
             # 🔥 STRICT LOCK
-            if time_gap < 3.0:
+            # Reduce lock time: 3.0 -> 1.5 seconds.
+            # Agar kalau orang yang sama masuk lagi (handover cepet / re-entry), tidak dianggap imposter.
+            if time_gap < 1.5:
                  if claim_type == 'FACE':
                      self.active_identities[name] = (cam_index, track_id, score, now)
                      return True
 
-                 if score > 0.85 or score > (curr_score + 0.20):
+                 # Relaxed score check: Allow if score > 0.65 (was 0.85)
+                 if score > SETTINGS.get("thresh_strict_lock", 0.65) or score > (curr_score + 0.20):
                      self.active_identities[name] = (cam_index, track_id, score, now)
                      return True
                  
-                 print(f"[CLAIM REJECT] Strict Lock. Score {score:.2f} not enough vs Curr {curr_score:.2f} (+0.20 needed or >0.85)")
+                 print(f"[CLAIM REJECT] Strict Lock. Score {score:.2f} not enough vs Curr {curr_score:.2f} (+0.20 needed or >0.65)")
                  return False
             
             if claim_type == 'FACE': 
                 self.active_identities[name] = (cam_index, track_id, score, now)
                 return True
-            else: return False
+            else: return True # 🔥 Auto-Allow if time_gap >= 1.5s (Reset Lock)
 
         if score > (curr_score + 0.05): # 🔥 UPDATE: Butuh margin +0.05 untuk update score (Stabilizer)
             self.active_identities[name] = (cam_index, track_id, score, now)
@@ -146,6 +162,9 @@ class MultiObjectTracker:
         self.occlusion_cooldown = {} # Mencatat kapan terakhir kena macet/occlusion
         self.verification_counter = {} # Menghitung berapa kali berturut-turut match (Stabilizer)
         self.track_start_times = {} # 🔥 RETROACTIVE: ID -> First Seen Timestamp
+        
+        # 🔥 FAST-ID Identity Map (Missing Init Fix)
+        self.guest_identity_map = {}
 
     def set_camera_id(self, cam_id):
         self.camera_id = cam_id
@@ -173,19 +192,22 @@ class MultiObjectTracker:
                     
                     # ATURAN: Kalau "Bantet" (ratio < 1.6) DAN Confidence pas-pasan (< 0.75), BUANG!
                     # Kecuali kalau conf sangat tinggi (misal orang duduk jelas banget), kita loloskan.
-                    if ratio < 1.6 and conf < 0.60:
+                    sitting_ratio = SETTINGS.get("thresh_sitting_ratio", 1.6)
+                    sitting_conf = SETTINGS.get("thresh_sitting_conf", 0.60)
+                    if ratio < sitting_ratio and conf < sitting_conf:
                         continue 
                     
                 filtered_dets.append([x1, y1, x2, y2, conf])
 
             # 🔥 SOLUSI ANTI-NYANGKUT 1: DYNAMIC GATING 🔥
             # Jika ada lebih dari 1 orang, MATIKAN Mode Ninja.
-            # Kita harus Strict (0.5) agar kotak tidak loncat ke tetangga.
-            # Kalau sendirian, baru boleh Mode Ninja (1.1) untuk lari kencang.
+            # Gunakan setting 'gate_threshold_global' (Default 0.40 - Sangat Strict)
+            strict_gate = SETTINGS.get("gate_threshold_global", 0.40)
+            
             if len(filtered_dets) > 1:
-                self.deepsort.max_iou_distance = 0.5 # STRICT MODE (Anti-Nyangkut)
+                self.deepsort.max_iou_distance = strict_gate # STRICT MODE (Anti-Nyangkut)
             else:
-                self.deepsort.max_iou_distance = 1.1 # NINJA MODE (Single Player)
+                self.deepsort.max_iou_distance = strict_gate + 0.30 # Relaxed dikit tapi jangan 1.1 (Bahaya)
 
             self.deepsort.update(filtered_dets)
         else:
@@ -207,7 +229,9 @@ class MultiObjectTracker:
                 label, is_real = self.fusion.get_label(tid)
                 
                 if is_real: continue
-                if faces_processed_count >= 4: break # 🔥 NAIKKAN LIMIT: 2 -> 4 (Biar kalau ramai/ghosting, user tetap kebagian jatah)
+                # 🔥 NAIKKAN LIMIT: Pakai Settings (Default 10)
+                max_faces = SETTINGS.get("max_faces_to_process", 10)
+                if faces_processed_count >= max_faces: break
                 
                 # 🔥 SITTING OPTIMIZATION: EXPAND SEARCH AREA 🔥
                 # Saat duduk, kepala ada di bagian atas, tapi proporsi tubuh memendek.
@@ -679,17 +703,75 @@ class MultiObjectTracker:
                                     print(f"[REID SUCCESS] ID {tid} -> {m_name} (Skor: {m_score:.2f})")
                                     self.fusion.lock_real_name(tid, m_name)
                                     self.reid_skip_timer[tid] = 0
+                                    
+                                    # 🔥 FAST-ID LEARNING 🔥
+                                    # Kalau kita berhasil kenali wajah/body sebagai "Ilham",
+                                    # Kita juga harus tanya: "Ilham ini Guest-berapa secara body?"
+                                    # Supaya nanti kalau cuma kelihatan body-nya (Guest-X), kita tahu itu Ilham.
+                                    if feat is not None:
+                                        # 🔥 FIX: Use settings instead of hardcoded threshold
+                                        fast_id_thresh = SETTINGS.get("thresh_guest_reid", 0.80)
+                                        gid, _ = session_registry.match_or_register(feat, threshold=fast_id_thresh)
+                                        if gid:
+                                            self.guest_identity_map[gid] = m_name
+                                            # print(f"[FAST-ID] Linked {gid} body to {m_name}")
                     else:
                         # Gagal Match -> Reset Counter (Biar harus mulai dari nol lagi)
                         # 🔥 DEBUG FLICKER 🔥
                         if self.verification_counter.get(tid, 0) > 0:
-                             print(f"[REID RESET] ID {tid} Score Drop. Name: {m_name}, Score: {m_score:.2f} (Base: {base_thresh:.2f})")
+                             # print(f"[REID RESET] ID {tid} Score Drop. Name: {m_name}, Score: {m_score:.2f} (Base: {base_thresh:.2f})")
+                             pass
                         
                         self.verification_counter[tid] = 0
                         
-                        # 🔥 GUEST MODE (GLOBAL TRACKING) 🔥
-                        # [DISABLED BY REQUEST]
-                        pass
+                        # 🔥 GUEST MODE (GLOBAL TRACKING FOR STRANGERS) 🔥
+                        # Jika tidak dikenali sebagai 'Member', kita cek apakah dia 'Guest' yang konsisten?
+                        # Syarat: Feature vector ada & Valid.
+                        if feat is not None:
+                             # 🔥 UPDATE: Lower threshold (0.65 -> 0.60) agar ID Guest lebih stabil (Gak gampang ganti)
+                             # UPDATE: Now using Settings (0.50)
+                             guest_thresh = SETTINGS.get("thresh_guest_reid", 0.50)
+                             guest_id, is_new = session_registry.match_or_register(feat, threshold=guest_thresh)
+                             
+                             if guest_id:
+                                 # print(f"[GUEST REID] Track {tid} -> {guest_id} (New? {is_new})")
+                                 # Set sebagai label sementara (TAPI tetap is_real=False agar warnanya Orange)
+                                 # Visualizer nanti yang akan handle display ID-nya.
+                                 # Kita simpan di fusion labels tapi dengan prefix khusus biar visualizer tau.
+                                 
+                                 # 🔥 FIX V12.21: JANGAN PAKAI lock_real_name !!!
+                                 # lock_real_name itu otomatis bikin HIJAU (is_real=True).
+                                 # Kita mau Guest itu tetap ORANGE (is_real=False).
+                                 
+                                 # 🔥 FAST-ID CHECK 🔥
+                                 # Cek apakah Guest ini sebenarnya sudah kita kenal identitasnya?
+                                 if guest_id in self.guest_identity_map:
+                                     known_name = self.guest_identity_map[guest_id]
+                                     # [CONDITIONAL FAST-ID]
+                                     # User Request: "Jika di awal sudah keidentifikasi muka, maka dianggap active"
+                                     # "dan ketika jalan tanpa muka (hanya badan), langsung keidentifikasi (HIJAU)."
+                                     
+                                     # Syarat: Nama "known_name" harus SUDAH AKTIF (Pernah verified Face sebelumnya).
+                                     is_already_active = global_id_manager.is_identity_verified(known_name)
+                                     
+                                     # Safety Check: Wajah tidak boleh contradict
+                                     face_label = current_face_map.get(tid, None)
+                                     is_face_contradiction = (face_label and face_label != "UNKNOWN_FACE" and face_label != known_name)
+                                     
+                                     if is_already_active and not is_face_contradiction:
+                                         # AUTO-PROMOTE KE HIJAU (SAFE)!
+                                         self.fusion.lock_real_name(tid, known_name)
+                                     else:
+                                         # Strict Mode: Kalau belum pernah aktif hari ini, atau wajah conflict:
+                                         # Tahan dulu jadi Guest (Orange).
+                                         pass
+                                 else:
+                                     # Belum kenal, tetap jadi Guest (Orange)
+                                     self.fusion.labels[tid] = guest_id
+                                     # self.fusion.is_real[tid] = False # Defaultnya sudah False, tapi biar aman.
+                                 
+                                 # Jangan set is_real=True! Biarkan False (Orange).
+
 
         # VISUALISASI
         active_names_in_frame = {}
@@ -706,19 +788,21 @@ class MultiObjectTracker:
             if is_real and label != f"Person {tid}":
                 last_face = self.last_face_confirmed.get(tid, 0)
                 if time.time() - last_face < 5.0: # 5 Detik setelah wajah hilang
-                     # Ambil crop badan terbaru
-                     # (Note: Kita harus ambil crop lagi atau simpan di track. 
-                     #  Untuk efisiensi, kita panggil register pakai feat yang udah ada di track.features kalau bisa.
-                     #  Tapi di sini kita pakai cara simpel: Panggil fungsi register via body_registry kalau ada fitur)
-                     pass # (Logic sudah ada di auto-learn, kita cuma perlu pastikan thresholdnya ditembus)
-                     # TAPI KITA BUTUH "FORCE LEARN".
-                     # Jadi kita inject manual ke body registry.
-                     # (To implementation detail: We need body feature. It is in 'features' list of track?)
-                     # Kita skip coding kompleks di sini biar gak berat. 
-                     # Kita pakai trik: NAIKKAN TOLERANSI di body_registry.register via parameter 'force' kalau ada.
-                     # Tapi body_registry.register gak punya 'force'.
-                     # OK, SAYA AKAN EDIT SETTINGS SAJA. 
-                     # Ubah thresh_back_view_learn jadi lebih rendah di settings.py
+                     # 🔥 FIX: IMPLEMENTASI "FORCE LEARN" (Tampak Belakang)
+                     # Kita gunakan fitur yang ada di body_registry untuk memaksa update anchors.
+                     try:
+                         # Ambil tracks yang fiturnya available (di DeepSORT biasanya tersimpan)
+                         # Tapi di loop ini kita tidak punya akses direct ke 'feat' raw.
+                         # Workaround: Kita berharap 'auto-learn' di atas sudah menangani feat extraction.
+                         # TAPI, kita bisa panggil extract_body_feature LAGI kalau perlu.
+                         
+                         feat_force = self.extract_body_feature(frame, bbox, tid)
+                         if feat_force is not None:
+                             # PANGGIL DENGAN FORCE!
+                             body_registry.register(label, feat_force, force_replace_anchors=True)
+                             print(f"[FORCE LEARN] Memaksa belajar tampak belakang untuk {label}!")
+                     except Exception as e:
+                         print(f"[FORCE LEARN ERROR] {e}")
 
 
             if is_real: 

@@ -22,11 +22,8 @@ class BodyRegistry:
             
         self.load()
 
-    def clear_memory(self):
-        """ HARD RESET: Lupakan semua data di RAM """
-        self.profiles = {}
-        self.last_seen = {}
-        print("[BodyRegistry] MEMORY WIPED! Semua data lilt-lilt hilang.")
+    # Note: clear_memory method is defined at the end of the class (line 208)
+    # to have full disk wipe capability
 
     def load(self):
         self.profiles = {}
@@ -90,6 +87,9 @@ class BodyRegistry:
         
         if not is_duplicate:
             self.profiles[name].append(feature)
+            
+            # 🔥 FIX: Limit profile list size to prevent memory leak
+            # Keep max 50 features per person
             if len(self.profiles[name]) > 50:
                 #  STRATEGI ANTI-DATA KOTOR (ANCHOR) 
                 # Kita JANGAN hapus data awal (index 0). Itu biasanya data registrasi paling murni/bagus.

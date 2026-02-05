@@ -59,6 +59,9 @@ class VideoSystem:
     def run(self):
         try:
             while self.running:
+                # 🔥 GLOBAL SYNC: Reset active PIDs for this cycle
+                visualizer.start_new_cycle()
+                
                 frames = []
                 raw_frames = [] 
                 

@@ -1,10 +1,5 @@
-2026-01-23 01:13:43 [INFO] ========== [SYSTEM STARTUP] ==========
-2026-01-23 01:13:43 [INFO] Menginisialisasi Sistem Kamera...
-2026-01-23 01:13:43 [INFO] Target Kamera dari Config: 4
-2026-01-23 01:13:56 [INFO] Sistem berjalan (Main Loop Active).
-[2026-01-23] 2. Ilham Gozali_A11.2023.15105 | Ruang Dosen | 01:14:02 → 01:14:13 | Ruang Dosen | UNKNOWN
-[2026-01-23] 3. Ilham Gozali_A11.2023.15105 | Ruang Dosen | 01:14:02 → 01:14:13 | Ruang Dosen | OUTDOOR
-[2026-01-23] 5. Ilham Gozali_A11.2023.15105 | Ruang Dosen | 01:14:42 → 01:15:07 | Ruang Dosen | UNKNOWN
-[2026-01-23] 6. Ilham Gozali_A11.2023.15105 | Ruang Dosen | 01:14:42 → 01:15:07 | Ruang Dosen | OUTDOOR
-[2026-01-23] 8. Ilham Gozali_A11.2023.15105 | Ruang Dosen | 01:15:22 → 01:16:07 | Ruang Dosen | UNKNOWN
-2026-01-23 01:16:13 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-02-04 09:42:08 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-02-04 09:42:08 [INFO] Menginisialisasi Sistem Kamera...
+2026-02-04 09:42:08 [INFO] Target Kamera dari Config: 4
+2026-02-04 09:42:26 [INFO] Sistem berjalan (Main Loop Active).
+2026-02-04 09:43:10 [INFO] ========== [SYSTEM OFFLINE] ==========
