@@ -175,17 +175,26 @@ async def camera_stream_websocket(
                 except asyncio.TimeoutError:
                     pass  # No command received, continue
                     
+            except WebSocketDisconnect:
+                # Client disconnected - exit loop cleanly
+                break
             except Exception as e:
-                print(f"[WS] Error in stream loop: {e}")
-                await asyncio.sleep(0.1)
+                error_msg = str(e).lower()
+                # Check for disconnect-related errors and exit silently
+                if "disconnect" in error_msg or "not connected" in error_msg or "accept" in error_msg:
+                    break
+                # Only log unexpected errors (and limit frequency)
+                print(f"[WS] Unexpected error: {e}")
+                break
             
     except WebSocketDisconnect:
-        manager.disconnect(websocket, camera_id)
-        print(f"[WS] Client disconnected from camera {camera_id}")
+        pass  # Normal disconnect, no need to log
     except Exception as e:
-        print(f"[WS] Error in WebSocket connection: {e}")
-        manager.disconnect(websocket, camera_id)
+        error_msg = str(e).lower()
+        if "disconnect" not in error_msg and "not connected" not in error_msg:
+            print(f"[WS] Error in WebSocket connection: {e}")
     finally:
+        manager.disconnect(websocket, camera_id)
         try:
             pubsub.unsubscribe(ws_channel)
             pubsub.close()

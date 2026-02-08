@@ -529,13 +529,19 @@ class MultiObjectTracker:
                     face_already_found = (m_name is not None and m_score > 0.60)
                     
                     if not face_already_found:
-                        m_name, m_score = body_registry.match_global(feat, active_names=active_list)
+                        body_result = body_registry.match_global(feat, active_names=active_list)
+                        if body_result is not None:
+                            m_name, m_score = body_result
+                        else:
+                            m_name, m_score = None, 0.0
                     else:
                         # Kalau sudah ada wajah, kita CUMA "tambah keyakinan" pakai body (Opsional),
                         # Tapi jangan biarkan body merusak (overwrite jadi None).
-                        b_name, b_score = body_registry.match_global(feat, active_names=active_list)
-                        if b_name == m_name and b_score > 0:
-                            m_score = max(m_score, b_score) # Ambil yang terbaik
+                        body_result = body_registry.match_global(feat, active_names=active_list)
+                        if body_result is not None:
+                            b_name, b_score = body_result
+                            if b_name == m_name and b_score > 0:
+                                m_score = max(m_score, b_score) # Ambil yang terbaik
                     
                     detected_face = current_face_map.get(tid, None)
                     # 🔥 FIX: Jangan langsung nolkan! Beri penalti saja.

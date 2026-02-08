@@ -40,12 +40,13 @@ class FrameProcessor:
         self.frame_count = 0
         print(f"[PROCESSOR] Initialized successfully")
     
-    def process_frame(self, frame: np.ndarray) -> Dict[str, Any]:
+    def process_frame(self, frame: np.ndarray, skip_ml: bool = False) -> Dict[str, Any]:
         """
         Process a single frame through the ML pipeline.
         
         Args:
             frame: BGR image as numpy array
+            skip_ml: If True, skip detection and only use tracker predictions (faster)
             
         Returns:
             Dict containing:
@@ -78,9 +79,13 @@ class FrameProcessor:
         # Store raw frame before annotation
         raw_frame = frame.copy()
         
-        # Call the original tracker - does ALL processing internally
-        # Returns annotated frame with bboxes, labels, etc.
-        annotated_frame = self.tracker.process_frame(frame)
+        if skip_ml:
+            # Skip ML detection - only use tracker predictions (fast path)
+            # Just draw existing tracks without new detection
+            annotated_frame = self._tracking_only(frame)
+        else:
+            # Full ML pipeline - detection + tracking + identification
+            annotated_frame = self.tracker.process_frame(frame)
         
         # Extract detection data from tracker's internal state
         detections = self._extract_detections()
@@ -95,6 +100,39 @@ class FrameProcessor:
             "annotated_frame": annotated_frame,
             "raw_frame": raw_frame
         }
+    
+    def _tracking_only(self, frame: np.ndarray) -> np.ndarray:
+        """
+        Fast path: Only update tracker predictions without running ML detection.
+        Used for intermediate frames to boost FPS.
+        """
+        annotated_frame = frame.copy()
+        
+        try:
+            # Get existing tracks and predict new positions
+            tracks = self.tracker.deepsort.get_active_tracks(with_feature=False)
+            
+            for t in tracks:
+                tid, bbox = t[0], t[1]
+                x1, y1, x2, y2 = map(int, bbox)
+                
+                # Get identity from fusion manager
+                label, is_real = self.tracker.fusion.get_label(tid)
+                
+                # Draw bounding box
+                color = (0, 255, 0) if is_real else (0, 165, 255)  # Green for known, orange for guest
+                cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), color, 2)
+                
+                # Draw label
+                label_text = label if is_real else f"Guest-{tid}"
+                cv2.putText(annotated_frame, label_text, (x1, y1 - 10),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+                
+        except Exception as e:
+            pass  # Return frame as-is on error
+        
+        return annotated_frame
+
     
     def _extract_detections(self) -> list:
         """

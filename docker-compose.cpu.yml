@@ -1,0 +1,58 @@
+# Docker Compose - CPU Worker Profile
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.cpu.yml up
+
+services:
+  # Camera Worker 1 (CPU Mode)
+  camera-worker-1:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.worker-cpu
+    container_name: indoor_worker_cam1_cpu
+    environment:
+      - DATABASE_URL=postgresql://indoor_user:indoor_pass_2026@postgres:5432/indoor_tracking
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+      - REDIS_URL=redis://redis:6379
+      - CAMERA_ID=${CAMERA_ID_1}
+    volumes:
+      - ./indoor:/app/indoor
+      - ./models:/app/models
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./config:/app/config
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+      api:
+        condition: service_healthy
+    networks:
+      - indoor_network
+    restart: unless-stopped
+    command: python -m ml_services.camera_worker --camera-id ${CAMERA_ID_1}
+
+  # Camera Worker 2 (CPU) - Optional
+  # camera-worker-2:
+  #   build:
+  #     context: .
+  #     dockerfile: docker/Dockerfile.worker-cpu
+  #   container_name: indoor_worker_cam2_cpu
+  #   environment:
+  #     - DATABASE_URL=postgresql://indoor_user:indoor_pass_2026@postgres:5432/indoor_tracking
+  #     - QDRANT_HOST=qdrant
+  #     - QDRANT_PORT=6333
+  #     - REDIS_URL=redis://redis:6379
+  #     - CAMERA_ID=${CAMERA_ID_2}
+  #   volumes:
+  #     - ./indoor:/app/indoor
+  #     - ./models:/app/models
+  #     - ./data:/app/data
+  #     - ./logs:/app/logs
+  #     - ./config:/app/config
+  #   depends_on:
+  #     - api
+  #   networks:
+  #     - indoor_network
+  #   restart: unless-stopped
+  #   command: python -m ml_services.camera_worker --camera-id ${CAMERA_ID_2}

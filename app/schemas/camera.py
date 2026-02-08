@@ -1,5 +1,5 @@
 """Camera & Room Schemas"""
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_serializer
 from typing import Optional
 from datetime import datetime
 from uuid import UUID
@@ -22,6 +22,10 @@ class RoomResponse(RoomBase):
     is_active: bool
     camera_count: int = 0
     
+    @field_serializer('id')
+    def serialize_id(self, v: UUID) -> str:
+        return str(v) if v else None
+    
     class Config:
         from_attributes = True
 
@@ -30,7 +34,7 @@ class CameraBase(BaseModel):
     """Base camera schema"""
     name: str = Field(..., min_length=1, max_length=100)
     rtsp_url: str = Field(..., description="RTSP URL or camera index (0, 1, 2)")
-    room_id: str
+    room_id: str  # Keep as str for input (accepts both str and UUID)
 
 
 class CameraCreate(CameraBase):
@@ -49,15 +53,21 @@ class CameraUpdate(BaseModel):
     is_active: Optional[bool] = None
 
 
-class CameraResponse(CameraBase):
+class CameraResponse(BaseModel):
     """Schema for camera response"""
     id: UUID
-    room_id: UUID  # Override parent's str type
+    name: str
+    rtsp_url: str
+    room_id: UUID
     room_name: Optional[str] = None
     is_active: bool
     is_online: bool
     last_seen: Optional[datetime] = None
     created_at: datetime
+    
+    @field_serializer('id', 'room_id')
+    def serialize_uuids(self, v: UUID) -> str:
+        return str(v) if v else None
     
     class Config:
         from_attributes = True

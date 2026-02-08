@@ -98,8 +98,9 @@ async def register_person(
                 detail="Invalid image file"
             )
         
-        # Extract face embedding
-        embedding = recognizer.extract_embedding(image)
+        # Extract face embedding (need RGB image)
+        rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        embedding = recognizer.get_embedding(rgb_image)
         if embedding is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,

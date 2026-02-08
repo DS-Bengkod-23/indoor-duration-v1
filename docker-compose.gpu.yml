@@ -1,0 +1,79 @@
+# Docker Compose - GPU Worker Profile
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.gpu.yml up
+
+services:
+  # Camera Worker 1 (GPU Enabled)
+  camera-worker-1:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.worker
+    container_name: indoor_worker_cam1
+    runtime: nvidia  # Requires NVIDIA Container Runtime
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=0
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility,video
+      - DATABASE_URL=postgresql://indoor_user:indoor_pass_2026@postgres:5432/indoor_tracking
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+      - REDIS_URL=redis://redis:6379
+      - CAMERA_ID=${CAMERA_ID_1}
+    volumes:
+      - ./indoor:/app/indoor
+      - ./models:/app/models
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./config:/app/config
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+      api:
+        condition: service_healthy
+    networks:
+      - indoor_network
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    command: python -m ml_services.camera_worker --camera-id ${CAMERA_ID_1}
+
+  # Camera Worker 2 (GPU) - Optional
+  # Uncomment if you have multiple cameras
+  # camera-worker-2:
+  #   build:
+  #     context: .
+  #     dockerfile: docker/Dockerfile.worker
+  #   container_name: indoor_worker_cam2
+  #   runtime: nvidia
+  #   environment:
+  #     - NVIDIA_VISIBLE_DEVICES=0
+  #     - NVIDIA_DRIVER_CAPABILITIES=compute,utility,video
+  #     - DATABASE_URL=postgresql://indoor_user:indoor_pass_2026@postgres:5432/indoor_tracking
+  #     - QDRANT_HOST=qdrant
+  #     - QDRANT_PORT=6333
+  #     - REDIS_URL=redis://redis:6379
+  #     - CAMERA_ID=${CAMERA_ID_2}
+  #   volumes:
+  #     - ./indoor:/app/indoor
+  #     - ./models:/app/models
+  #     - ./data:/app/data
+  #     - ./logs:/app/logs
+  #     - ./config:/app/config
+  #   depends_on:
+  #     - api
+  #   networks:
+  #     - indoor_network
+  #   restart: unless-stopped
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: 1
+  #             capabilities: [gpu]
+  #   command: python -m ml_services.camera_worker --camera-id ${CAMERA_ID_2}

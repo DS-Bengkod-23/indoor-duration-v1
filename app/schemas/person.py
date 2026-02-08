@@ -1,7 +1,8 @@
 """Person Schemas - Request/Response validation"""
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_serializer
 from typing import Optional
 from datetime import datetime
+from uuid import UUID
 
 
 class PersonBase(BaseModel):
@@ -26,12 +27,16 @@ class PersonUpdate(BaseModel):
 
 class PersonResponse(PersonBase):
     """Schema for person response"""
-    id: str
+    id: UUID
     photo_path: Optional[str] = None
     embedding_id: Optional[str] = None
     is_active: bool
     created_at: datetime
     updated_at: Optional[datetime] = None
+    
+    @field_serializer('id')
+    def serialize_id(self, v: UUID) -> str:
+        return str(v)
     
     class Config:
         from_attributes = True

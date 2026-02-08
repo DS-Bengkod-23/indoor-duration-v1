@@ -32,7 +32,6 @@ services:
       - qdrant_data:/qdrant/storage
     environment:
       - QDRANT__SERVICE__GRPC_PORT=6334
-    # Simplified health check - just test if port is listening
     healthcheck:
       test: ["CMD-SHELL", "nc -z localhost 6333 || exit 1"]
       interval: 10s
@@ -83,7 +82,7 @@ services:
       postgres:
         condition: service_healthy
       qdrant:
-        condition: service_started  # Changed from service_healthy - Qdrant image doesn't have wget/curl
+        condition: service_started
       redis:
         condition: service_healthy
     networks:
@@ -96,50 +95,21 @@ services:
       retries: 3
       start_period: 40s
 
-  # Camera Worker 1 (GPU Enabled)
-  # Note: You need to start this separately for each camera
-  # Usage: docker-compose up camera-worker-1
-  camera-worker-1:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.worker
-    container_name: indoor_worker_cam1
-    runtime: nvidia  # Requires NVIDIA Container Runtime
-    # Note: Local cameras use Redis subscription (no device mapping needed)
-    # IP/RTSP cameras connect directly via network
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=0  # Use GPU 0 (GTX 1650 Ti)
-      - NVIDIA_DRIVER_CAPABILITIES=compute,utility,video
-      - DATABASE_URL=postgresql://indoor_user:indoor_pass_2026@postgres:5432/indoor_tracking
-      - QDRANT_HOST=qdrant
-      - QDRANT_PORT=6333
-      - REDIS_URL=redis://redis:6379
-      - CAMERA_ID=${CAMERA_ID_1}  # Set in .env file
-    volumes:
-      - ./indoor:/app/indoor
-      - ./models:/app/models
-      - ./data:/app/data
-      - ./logs:/app/logs
-      - ./config:/app/config
-    depends_on:
-      postgres:
-        condition: service_healthy
-      qdrant:
-        condition: service_started  # Changed from service_healthy
-      api:
-        condition: service_healthy
-    networks:
-      - indoor_network
-    restart: unless-stopped
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
-    # Removed profiles - now auto-starts with docker-compose up
-    command: python -m ml_services.camera_worker --camera-id ${CAMERA_ID_1}
+# ============================================
+# CAMERA WORKERS - Use profile files!
+# ============================================
+# Workers are NOT included in base docker-compose.yml
+# Use the appropriate profile:
+#
+# GPU mode (with NVIDIA GPU):
+#   docker-compose -f docker-compose.yml -f docker-compose.gpu.yml up
+#
+# CPU mode (without GPU):
+#   docker-compose -f docker-compose.yml -f docker-compose.cpu.yml up
+#
+# Infrastructure only (no workers):
+#   docker-compose up
+# ============================================
 
 volumes:
   postgres_data:

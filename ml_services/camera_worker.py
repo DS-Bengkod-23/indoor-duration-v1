@@ -3,12 +3,12 @@ import cv2
 import asyncio
 import base64
 import json
+import numpy as np
 from datetime import datetime
 from typing import Optional
 import sys
 import os
 import redis
-import pickle
 
 # Add parent directory to path  
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -152,7 +152,12 @@ class CameraWorker:
                 
                 if self.use_redis:
                     # Get frame from Redis subscription
-                    message = self.pubsub.get_message(timeout=1.0)
+                    try:
+                        message = self.pubsub.get_message(timeout=1.0)
+                    except Exception as e:
+                        print(f"[WORKER] Redis pubsub error: {e}")
+                        await asyncio.sleep(1)
+                        continue
                     
                     if message is None:
                         await asyncio.sleep(0.01)
@@ -163,16 +168,33 @@ class CameraWorker:
                         continue
                     
                     try:
-                        # Deserialize frame data
-                        frame_data = pickle.loads(message['data'])
-                        frame = pickle.loads(frame_data['frame'])
+                        # Parse JSON frame data (JPEG compressed)
+                        frame_data = json.loads(message['data'])
                         
-                        # Use frame count from capture service
+                        # Decode JPEG from base64
+                        if 'frame_jpeg' in frame_data:
+                            img_bytes = base64.b64decode(frame_data['frame_jpeg'])
+                            nparr = np.frombuffer(img_bytes, np.uint8)
+                            frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                        else:
+                            # Legacy pickle support (skip for now)
+                            print(f"[WORKER] ⚠️ Received non-JPEG frame, skipping")
+                            continue
+                        
+                        if frame is None:
+                            print(f"[WORKER] ⚠️ Failed to decode JPEG frame")
+                            continue
+                        
+                        # Log first frame
                         if frame_count == 0:
-                            print(f"[WORKER] ✅ Receiving frames from Redis")
+                            print(f"[WORKER] ✅ Receiving JPEG frames from Redis")
                         
+                    except json.JSONDecodeError as e:
+                        print(f"[WORKER] Error parsing JSON: {e}")
+                        await asyncio.sleep(0.1)
+                        continue
                     except Exception as e:
-                        print(f"[WORKER] Error deserializing Redis frame: {e}")
+                        print(f"[WORKER] Error decoding frame: {e}")
                         await asyncio.sleep(0.1)
                         continue
                 else:
@@ -188,8 +210,14 @@ class CameraWorker:
                 
                 frame_count += 1
                 
-                # Process frame
-                result = self.processor.process_frame(frame)
+                # Frame skipping for FPS optimization:
+                # Run full ML detection every N frames
+                # Skip ML on intermediate frames (use tracker predictions only)
+                ML_EVERY_N_FRAMES = 3  # Run ML every 3rd frame
+                skip_ml = (frame_count % ML_EVERY_N_FRAMES != 0)
+                
+                # Process frame (with or without ML)
+                result = self.processor.process_frame(frame, skip_ml=skip_ml)
                 
                 # Update database with detections
                 for detection in result["detections"]:
