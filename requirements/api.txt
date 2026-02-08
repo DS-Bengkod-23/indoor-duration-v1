@@ -1,0 +1,29 @@
+# API-specific dependencies
+-r base.txt
+
+# FastAPI and server
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+websockets>=12.0
+
+# Database
+sqlalchemy>=2.0.0
+psycopg2-binary>=2.9.0
+alembic>=1.12.0
+
+# Qdrant vector database client
+qdrant-client>=1.7.0
+
+# Redis
+redis>=5.0.0
+
+# Image processing (needed for user photo upload)
+opencv-python-headless>=4.8.0
+pillow>=10.0.0
+
+# Face recognition (insightface for FaceRecognizer)
+insightface>=0.7.3
+onnxruntime>=1.16.0
+
+# Utilities
+requests>=2.31.0

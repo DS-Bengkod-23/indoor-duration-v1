@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Camera Stream Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #1a1a2e;
+            color: white;
+            padding: 20px;
+            margin: 0;
+        }
+        h1 {
+            color: #4ecca3;
+            margin-bottom: 10px;
+        }
+        .status {
+            padding: 10px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            font-weight: bold;
+        }
+        .status.connected { background: #2ecc71; color: #000; }
+        .status.connecting { background: #f39c12; color: #000; }
+        .status.disconnected { background: #e74c3c; }
+        
+        .stream-container {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        .video-wrapper {
+            flex: 2;
+            min-width: 640px;
+        }
+        #stream {
+            width: 100%;
+            max-width: 800px;
+            border: 3px solid #4ecca3;
+            border-radius: 8px;
+        }
+        .info-panel {
+            flex: 1;
+            min-width: 300px;
+            background: #16213e;
+            padding: 15px;
+            border-radius: 8px;
+        }
+        .detection-card {
+            background: #0f3460;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 5px;
+            border-left: 4px solid #4ecca3;
+        }
+        .detection-card.guest {
+            border-left-color: #f39c12;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        .stat-box {
+            background: #0f3460;
+            padding: 15px;
+            border-radius: 5px;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #4ecca3;
+        }
+        .stat-label {
+            font-size: 12px;
+            color: #999;
+        }
+        .config {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #16213e;
+            border-radius: 8px;
+        }
+        input {
+            padding: 8px;
+            border-radius: 5px;
+            border: 1px solid #4ecca3;
+            background: #0f3460;
+            color: white;
+            width: 350px;
+            margin-right: 10px;
+        }
+        button {
+            padding: 8px 20px;
+            background: #4ecca3;
+            border: none;
+            border-radius: 5px;
+            color: #000;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        button:hover {
+            background: #3da87d;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎥 Indoor Duration - Camera Stream Test</h1>
+    
+    <div class="config">
+        <label>Camera UUID: </label>
+        <input type="text" id="cameraId" value="5b184d0f-983d-4759-acbd-9742e7241562" placeholder="Enter Camera UUID">
+        <button onclick="connect()">Connect</button>
+        <button onclick="disconnect()" style="background: #e74c3c;">Disconnect</button>
+    </div>
+    
+    <div class="status disconnected" id="status">⭕ Disconnected</div>
+    
+    <div class="stream-container">
+        <div class="video-wrapper">
+            <img id="stream" src="" alt="Camera Stream - Connect to view"/>
+        </div>
+        
+        <div class="info-panel">
+            <h3>📊 Statistics</h3>
+            <div class="stats">
+                <div class="stat-box">
+                    <div class="stat-value" id="detectionCount">0</div>
+                    <div class="stat-label">Detections</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value" id="frameCount">0</div>
+                    <div class="stat-label">Frames</div>
+                </div>
+            </div>
+            
+            <h3>👤 Detected Persons</h3>
+            <div id="detections">
+                <p style="color: #666;">No detections yet...</p>
+            </div>
+            
+            <h3>⏱️ Last Update</h3>
+            <div id="timestamp" style="color: #4ecca3;">-</div>
+        </div>
+    </div>
+
+<script>
+let ws = null;
+let frameCount = 0;
+
+function connect() {
+    const cameraId = document.getElementById('cameraId').value;
+    const statusEl = document.getElementById('status');
+    
+    if (!cameraId) {
+        alert('Please enter a Camera UUID');
+        return;
+    }
+    
+    // Close existing connection
+    if (ws) {
+        ws.close();
+    }
+    
+    statusEl.className = 'status connecting';
+    statusEl.textContent = '🔄 Connecting...';
+    
+    // Connect to WebSocket
+    const wsUrl = `ws://localhost:8000/api/v1/ws/camera/${cameraId}`;
+    console.log('Connecting to:', wsUrl);
+    
+    ws = new WebSocket(wsUrl);
+    
+    ws.onopen = () => {
+        statusEl.className = 'status connected';
+        statusEl.textContent = '✅ Connected';
+        console.log('WebSocket connected');
+    };
+    
+    ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        
+        // Handle different message types
+        if (data.type === 'connection') {
+            console.log('Connection confirmed:', data.message);
+            return;
+        }
+        
+        if (data.type === 'ping' || data.type === 'pong') {
+            return;  // Ignore keep-alive
+        }
+        
+        // Frame data
+        if (data.frame_base64) {
+            document.getElementById('stream').src = 'data:image/jpeg;base64,' + data.frame_base64;
+            frameCount++;
+            document.getElementById('frameCount').textContent = frameCount;
+        }
+        
+        // Detections
+        if (data.detections) {
+            document.getElementById('detectionCount').textContent = data.detections.length;
+            
+            const detectionsEl = document.getElementById('detections');
+            if (data.detections.length > 0) {
+                detectionsEl.innerHTML = data.detections.map(d => `
+                    <div class="detection-card ${d.is_guest ? 'guest' : ''}">
+                        <strong>${d.person_name}</strong>
+                        ${d.nim_nip ? `<br><small>NIM/NIP: ${d.nim_nip}</small>` : ''}
+                        <br><small>Track: ${d.track_id} | Conf: ${(d.confidence * 100).toFixed(0)}%</small>
+                    </div>
+                `).join('');
+            } else {
+                detectionsEl.innerHTML = '<p style="color: #666;">No persons detected</p>';
+            }
+        }
+        
+        // Timestamp
+        if (data.timestamp) {
+            document.getElementById('timestamp').textContent = data.timestamp;
+        }
+    };
+    
+    ws.onclose = () => {
+        statusEl.className = 'status disconnected';
+        statusEl.textContent = '⭕ Disconnected';
+        console.log('WebSocket closed');
+    };
+    
+    ws.onerror = (err) => {
+        statusEl.className = 'status disconnected';
+        statusEl.textContent = '❌ Connection Error';
+        console.error('WebSocket error:', err);
+    };
+}
+
+function disconnect() {
+    if (ws) {
+        ws.close();
+        ws = null;
+    }
+    document.getElementById('stream').src = '';
+    frameCount = 0;
+    document.getElementById('frameCount').textContent = '0';
+    document.getElementById('detectionCount').textContent = '0';
+}
+
+// Auto-connect on page load
+window.onload = () => {
+    connect();
+};
+</script>
+</body>
+</html>

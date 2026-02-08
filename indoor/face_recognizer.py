@@ -1,16 +1,24 @@
 # indoor/face_recognizer.py
 import cv2
+import os
 import numpy as np
 from numpy.linalg import norm
 from insightface.app import FaceAnalysis
-from config.paths import get_data_paths
 from config.settings import SETTINGS
-import os
+
+# Import Qdrant client
+try:
+    from qdrant_client import QdrantClient
+    from qdrant_client.models import Filter, FieldCondition, MatchValue
+except ImportError:
+    print("[FaceRecognizer] Warning: qdrant-client not installed")
 
 class FaceRecognizer:
 
-    def __init__(self):
-        paths = get_data_paths()
+    def __init__(self, qdrant_host="localhost", qdrant_port=6333):
+        self.qdrant_host = os.environ.get("QDRANT_HOST", qdrant_host)
+        self.qdrant_port = int(os.environ.get("QDRANT_PORT", qdrant_port))
+        self.collection_name = "face_embeddings"
         self.debug = True 
         
         try:
@@ -22,23 +30,59 @@ class FaceRecognizer:
             self.app = FaceAnalysis(name="buffalo_s", providers=providers)
             self.app.prepare(ctx_id=-1, det_size=(160, 160))
 
+        # In-memory database cache {name: embedding_vector}
         self.db = {}
-        # Threshold dasar untuk kandidat
+        
+        # Thresholds
         self.threshold = SETTINGS.get("face_recog_threshold", 0.55)
-        # Threshold absolut untuk konfirmasi
         self.confirmed_threshold = SETTINGS.get("face_recog_confirmed", 0.78)
-        self.load_embeddings(paths["embeddings_dir"])
+        
+        # Initialize Qdrant and load embeddings
+        try:
+            self.client = QdrantClient(host=self.qdrant_host, port=self.qdrant_port)
+            self.load_embeddings_from_qdrant()
+        except Exception as e:
+            print(f"[FaceRecognizer] ERROR connecting to Qdrant: {e}")
+            self.client = None
 
-    def load_embeddings(self, emb_dir):
+
+    def load_embeddings_from_qdrant(self):
+        """Load all face embeddings from Qdrant into memory"""
         self.db = {}
-        for f in os.listdir(emb_dir):
-            if not f.endswith(".npy"): continue
-            try:
-                v = np.load(os.path.join(emb_dir, f)).astype(np.float32)
-                v = v / (norm(v) + 1e-6)
-                self.db[f[:-4]] = v
-            except: pass
-        print(f"[FaceRecognizer] Loaded {len(self.db)} identities")
+        
+        if self.client is None:
+            print("[FaceRecognizer] No Qdrant client, face DB empty")
+            return
+        
+        try:
+            # Scroll all face embeddings
+            results, _ = self.client.scroll(
+                collection_name=self.collection_name,
+                scroll_filter=Filter(
+                    must=[FieldCondition(key="is_active", match=MatchValue(value=True))]
+                ),
+                limit=10000,
+                with_vectors=True
+            )
+            
+            # Take first embedding per person
+            loaded = {}
+            for point in results:
+                name = point.payload.get("name")
+                if name and name not in loaded:
+                    vector = np.array(point.vector, dtype=np.float32)
+                    # Normalize
+                    vector = vector / (norm(vector) + 1e-6)
+                    self.db[name] = vector
+                    loaded[name] = True
+            
+            print(f"[FaceRecognizer] Loaded {len(self.db)} identities from Qdrant")
+        except Exception as e:
+            print(f"[FaceRecognizer] Error loading from Qdrant: {e}")
+    
+    def reload_embeddings(self):
+        """Reload embeddings from Qdrant (useful when new users registered)"""
+        self.load_embeddings_from_qdrant()
 
     def get_embedding(self, rgb):
         if rgb is None or rgb.size == 0: return None

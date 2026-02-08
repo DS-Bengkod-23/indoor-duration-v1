@@ -1,67 +1,109 @@
 # indoor/body_registry.py
 import numpy as np
 import os
+import sys
 import time
-
 import threading
+from typing import List, Optional, Dict, Any
 from config.settings import SETTINGS
 
-from config.paths import BODY_EMB_DIR
+# Import Qdrant client for vector database
+try:
+    from qdrant_client import QdrantClient
+    from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue
+    import uuid
+except ImportError:
+    print("[BodyRegistry] Warning: qdrant-client not installed. Install with: pip install qdrant-client")
 
 class BodyRegistry:
-    def __init__(self, db_folder=BODY_EMB_DIR):
-        self.db_folder = db_folder
-        self.profiles = {} 
-        self.last_seen = {} 
-        self.last_save_time = {} #  Track waktu simpan terakhir 
-        self.save_lock = threading.Lock() # 🛡️ Industrial Grade: Thread Safety Lock 
+    def __init__(self, qdrant_host="localhost", qdrant_port=6333):
+        """
+        Body embeddings registry using Qdrant vector database
+        No more .npy files - all body features stored in Qdrant
+        """
+        self.qdrant_host = os.environ.get("QDRANT_HOST", qdrant_host)
+        self.qdrant_port = int(os.environ.get("QDRANT_PORT", qdrant_port))
+        self.collection_name = "body_embeddings"
         
-        if not os.path.exists(self.db_folder):
-            os.makedirs(self.db_folder)
-            
-            
-        self.load()
+        # In-memory cache for fast lookup (loaded from Qdrant on init)
+        self.profiles = {}  # {name: [feature1, feature2, ...]}
+        self.last_seen = {}
+        self.save_lock = threading.Lock()
+        
+        # Initialize Qdrant client
+        try:
+            self.client = QdrantClient(host=self.qdrant_host, port=self.qdrant_port)
+            self._ensure_collection()
+            self.load()
+        except Exception as e:
+            print(f"[BodyRegistry] ERROR connecting to Qdrant at {self.qdrant_host}:{self.qdrant_port}: {e}")
+            print(f"[BodyRegistry] Falling back to empty registry (no persistence)")
+            self.client = None
 
-    # Note: clear_memory method is defined at the end of the class (line 208)
-    # to have full disk wipe capability
+
+    def _ensure_collection(self):
+        """Create Qdrant collection if not exists"""
+        try:
+            collections = self.client.get_collections().collections
+            collection_names = [col.name for col in collections]
+            
+            if self.collection_name not in collection_names:
+                self.client.create_collection(
+                    collection_name=self.collection_name,
+                    vectors_config=VectorParams(
+                        size=512,  # OSNet x1.0 produces 512D vectors
+                        distance=Distance.COSINE
+                    )
+                )
+                print(f"[BodyRegistry] Created Qdrant collection: {self.collection_name}")
+            else:
+                print(f"[BodyRegistry] Using existing collection: {self.collection_name}")
+        except Exception as e:
+            print(f"[BodyRegistry] Error ensuring collection: {e}")
+
+    # Note: clear_memory method is defined at the end of the class
+    # to have full Qdrant wipe capability
 
     def load(self):
+        """Load all body embeddings from Qdrant into memory cache"""
         self.profiles = {}
+        
+        if self.client is None:
+            print("[BodyRegistry] No Qdrant client, skipping load")
+            return
+        
         try:
-            files = [f for f in os.listdir(self.db_folder) if f.endswith(".npy")]
-            for f in files:
-                name = os.path.splitext(f)[0]
-                path = os.path.join(self.db_folder, f)
-                
-                #  AUTO-CLEANUP: Hapus hanya jika data > 18 Jam (Ganti Hari) 
-                # Biar kalau restart komputer di hari yang sama, data tidak hilang.
-                try:
-                    file_time = os.path.getmtime(path)
-                    age_hours = (time.time() - file_time) / 3600
-                    if age_hours > 18.0:
-                        os.remove(path)
-                        print(f"[BodyRegistry] 🧹 Menghapus data kadaluarsa untuk: {name} ({age_hours:.1f} jam)")
-                        continue
-                except: pass
-
-                try:
-                    data = np.load(path, allow_pickle=True)
-                    if data.ndim == 1: 
-                        norm = np.linalg.norm(data)
-                        if norm > 0: feat = data / norm
-                        self.profiles[name] = [feat]
-                    elif data.ndim == 2:
-                        self.profiles[name] = []
-                        for vec in data:
-                            norm = np.linalg.norm(vec)
-                            if norm > 0: vec = vec / norm
-                            self.profiles[name].append(vec)
-                except Exception as e:
-                    print(f"[BodyRegistry] Skip corrupt file {f}: {e}")
+            # Scroll through all body embeddings
+            results, _ = self.client.scroll(
+                collection_name=self.collection_name,
+                scroll_filter=Filter(
+                    must=[FieldCondition(key="is_active", match=MatchValue(value=True))]
+                ),
+                limit=10000,  # Load all active embeddings
+                with_vectors=True
+            )
             
-            print(f"[BodyRegistry] Loaded {len(self.profiles)} identities from {self.db_folder}")
+            # Group by person name
+            for point in results:
+                name = point.payload.get("name")
+                if not name:
+                    continue
+                
+                vector = np.array(point.vector, dtype=np.float32)
+                
+                # Normalize
+                norm = np.linalg.norm(vector)
+                if norm > 0:
+                    vector = vector / norm
+                
+                if name not in self.profiles:
+                    self.profiles[name] = []
+                
+                self.profiles[name].append(vector)
+            
+            print(f"[BodyRegistry] Loaded {len(self.profiles)} identities from Qdrant (total {len(results)} vectors)")
         except Exception as e:
-            print(f"[BodyRegistry] Error accessing folder: {e}")
+            print(f"[BodyRegistry] Error loading from Qdrant: {e}")
 
     def register(self, name, feature, force_replace_anchors=False):
         if feature is None: return
@@ -77,8 +119,46 @@ class BodyRegistry:
         # Biar baju lama (yang mungkin mirip teman) tidak disimpan lagi.
         if force_replace_anchors:
             print(f"[BodyRegistry] FORCE RESET profile for {name} (New Outfit Detected). Old size: {len(self.profiles[name])}")
-            self.profiles[name] = [] # HAPUS SEMUA DAFTAR LAMA
+
+    def register(self, name, feature, force_replace_anchors=False):
+        """Register body embedding to Qdrant"""
+        if feature is None:
+            return
         
+        if self.client is None:
+            # Fallback: only store in memory if no Qdrant
+            if name not in self.profiles:
+                self.profiles[name] = []
+            self.profiles[name].append(feature)
+            return
+        
+        norm = np.linalg.norm(feature)
+        if norm > 0:
+            feature = feature / norm
+        else:
+            return
+        
+        if name not in self.profiles:
+            self.profiles[name] = []
+            
+        #  SMART ANCHOR REPLACEMENT (New Outfit) 
+        # Jika ganti baju, kita RESET total history lama.
+        if force_replace_anchors:
+            print(f"[BodyRegistry] FORCE RESET profile for {name} (New Outfit Detected). Old size: {len(self.profiles[name])}")
+            # Delete all old embeddings for this person in Qdrant
+            try:
+                self.client.delete(
+                    collection_name=self.collection_name,
+                    points_selector=Filter(
+                        must=[FieldCondition(key="name", match=MatchValue(value=name))]
+                    )
+                )
+            except Exception as e:
+                print(f"[BodyRegistry] Error deleting old embeddings for {name}: {e}")
+            
+            self.profiles[name] = []  # Clear memory cache
+        
+        # Check for duplicates in memory
         is_duplicate = False
         for existing in self.profiles[name]:
             if np.dot(existing, feature) > 0.95: 
@@ -86,59 +166,42 @@ class BodyRegistry:
                 break
         
         if not is_duplicate:
+            # Add to memory cache
             self.profiles[name].append(feature)
             
-            # 🔥 FIX: Limit profile list size to prevent memory leak
-            # Keep max 50 features per person
+            # 🔥 Limit profile list size to prevent memory leak (max 50 features)
             if len(self.profiles[name]) > 50:
-                #  STRATEGI ANTI-DATA KOTOR (ANCHOR) 
-                # Kita JANGAN hapus data awal (index 0). Itu biasanya data registrasi paling murni/bagus.
-                # Kita hapus data "tengah" (index 5) yang merupakan hasil auto-learn terlama.
-                # Jadi: Index 0-4 (5 data pertama) ABADI (Safe Zone).
-                #       Index 5-50 adalah memori jangka panjang yang berputar.
-                self.profiles[name].pop(5)
-        
-   
-        
-        curr_time = time.time()
-        last_save = self.last_save_time.get(name, 0)
-        
-        should_write_disk = False
-        if len(self.profiles[name]) < 3:
-            should_write_disk = True
-        elif (curr_time - last_save) > 15.0:
-            should_write_disk = True
+                # Strategy: Keep first 5 (anchor data), rotate the rest
+                removed_vector = self.profiles[name].pop(5)
+                # Note: We don't delete from Qdrant here, periodic cleanup will handle it
             
-        if should_write_disk:
-            safe_name = name.replace("/", "_").replace("\\", "_")
-            path = os.path.join(self.db_folder, f"{safe_name}.npy")
-            
-            # 🔥 OPTIMISASI ASYNC (THREADING) + LOCK + SNAPSHOT 🛡️
-            # 1. Ambil Snapshot data SEKARANG. Jangan kirim pointer list asli.
-            snapshot_data = list(self.profiles[name]) 
-
-            def _save_task(data_copy):
-                with self.save_lock: # Cegah Race Condition
-                    # 🔥 FIX: Use _tmp.npy so np.save doesn't add extra .npy
-                    tmp_path = path.replace(".npy", "_tmp.npy")
+            # Save to Qdrant (async in thread)
+            def _save_to_qdrant():
+                with self.save_lock:
                     try:
-                        #  ATOMIC WRITE (INDUSTRIAL STANDARD) 🛡️
-                        # 1. Tulis ke file .tmp dulu (Aman kalau mati listrik tengah jalan)
-                        np.save(tmp_path, np.array(data_copy))
-                        # 2. Rename cepat (Atomic Operation)
-                        if os.path.exists(tmp_path):
-                            if os.path.exists(path): os.remove(path)
-                            os.rename(tmp_path, path)
+                        embedding_id = str(uuid.uuid4())
+                        point = PointStruct(
+                            id=embedding_id,
+                            vector=feature.flatten().tolist(),
+                            payload={
+                                "person_id": name,  # Use name as person_id for body embeddings
+                                "name": name,
+                                "is_active": True,
+                                "type": "body",
+                                "timestamp": time.time()
+                            }
+                        )
+                        
+                        self.client.upsert(
+                            collection_name=self.collection_name,
+                            points=[point]
+                        )
                     except Exception as e:
-                        print(f"[BodyRegistry] Failed to save {name}: {e}")
-                        if os.path.exists(tmp_path): os.remove(tmp_path)
-
-            from threading import Thread
-            # 2. Kirim snapshot ke thread
-            t = Thread(target=_save_task, args=(snapshot_data,), daemon=True)
-            t.start()
+                        print(f"[BodyRegistry] Failed to save {name} to Qdrant: {e}")
             
-            self.last_save_time[name] = curr_time
+            from threading import Thread
+            t = Thread(target=_save_to_qdrant, daemon=True)
+            t.start()
 
     def match_global(self, query_feat, active_names=[]):
         if len(self.profiles) == 0 or query_feat is None:
@@ -197,35 +260,25 @@ class BodyRegistry:
             if margin < 0.05:
                 # print(f"[AMBIGUITY REJECT] {best_name} ({best_score:.2f}) == {second_match[1]} ({second_match[0]:.2f}). Too close.")
                 return None, 0.0
-
-        return best_name, best_score
-
-
-
     def update_activity(self, name):
         self.last_seen[name] = time.time()
 
     def clear_memory(self):
-        """ HARD RESET: WIPES MEMORY & DISK """
-        print("[BodyRegistry] Wiping all memory...")
+        """HARD RESET: Wipes memory & Qdrant collection"""
+        print("[BodyRegistry] Wiping all memory & Qdrant data...")
         with self.save_lock:
             # 1. Clear RAM
             self.profiles.clear()
-            self.last_save_time.clear()
+            self.last_seen.clear()
             
-            # 2. Clear Disk (Delete all .npy files)
-            try:
-                folder = "data/body_embeddings"
-                if os.path.exists(folder):
-                    for filename in os.listdir(folder):
-                        if filename.endswith(".npy") or filename.endswith(".tmp"):
-                            file_path = os.path.join(folder, filename)
-                            try:
-                                os.remove(file_path)
-                                print(f"[BodyRegistry] Deleted: {filename}")
-                            except Exception as e:
-                                print(f"[BodyRegistry] Failed to delete {filename}: {e}")
-            except Exception as e:
-                print(f"[BodyRegistry] Disk wipe error: {e}")
+            # 2. Clear Qdrant (delete all points in collection)
+            if self.client:
+                try:
+                    # Delete entire collection and recreate
+                    self.client.delete_collection(collection_name=self.collection_name)
+                    self._ensure_collection()
+                    print(f"[BodyRegistry] Wiped Qdrant collection: {self.collection_name}")
+                except Exception as e:
+                    print(f"[BodyRegistry] Qdrant wipe error: {e}")
 
 body_registry = BodyRegistry()

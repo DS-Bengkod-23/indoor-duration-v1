@@ -1,0 +1,154 @@
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: indoor_postgres
+    environment:
+      POSTGRES_USER: indoor_user
+      POSTGRES_PASSWORD: indoor_pass_2026
+      POSTGRES_DB: indoor_tracking
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U indoor_user -d indoor_tracking"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - indoor_network
+    restart: unless-stopped
+
+  # Qdrant Vector Database
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: indoor_qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    environment:
+      - QDRANT__SERVICE__GRPC_PORT=6334
+    # Simplified health check - just test if port is listening
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 6333 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - indoor_network
+    restart: unless-stopped
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: indoor_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - indoor_network
+    restart: unless-stopped
+
+  # FastAPI Backend API
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    container_name: indoor_api
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://indoor_user:indoor_pass_2026@postgres:5432/indoor_tracking
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+      - REDIS_URL=redis://redis:6379
+      - DEBUG=False
+      - UPLOAD_DIR=/app/uploads
+      - SNAPSHOT_DIR=/app/logs/snapshots
+    volumes:
+      - ./uploads:/app/uploads
+      - ./logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started  # Changed from service_healthy - Qdrant image doesn't have wget/curl
+      redis:
+        condition: service_healthy
+    networks:
+      - indoor_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Camera Worker 1 (GPU Enabled)
+  # Note: You need to start this separately for each camera
+  # Usage: docker-compose up camera-worker-1
+  camera-worker-1:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.worker
+    container_name: indoor_worker_cam1
+    runtime: nvidia  # Requires NVIDIA Container Runtime
+    # Note: Local cameras use Redis subscription (no device mapping needed)
+    # IP/RTSP cameras connect directly via network
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=0  # Use GPU 0 (GTX 1650 Ti)
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility,video
+      - DATABASE_URL=postgresql://indoor_user:indoor_pass_2026@postgres:5432/indoor_tracking
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+      - REDIS_URL=redis://redis:6379
+      - CAMERA_ID=${CAMERA_ID_1}  # Set in .env file
+    volumes:
+      - ./indoor:/app/indoor
+      - ./models:/app/models
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./config:/app/config
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started  # Changed from service_healthy
+      api:
+        condition: service_healthy
+    networks:
+      - indoor_network
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    # Removed profiles - now auto-starts with docker-compose up
+    command: python -m ml_services.camera_worker --camera-id ${CAMERA_ID_1}
+
+volumes:
+  postgres_data:
+    driver: local
+  qdrant_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  indoor_network:
+    driver: bridge
