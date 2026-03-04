@@ -139,6 +139,29 @@ def stop_camera_system():
     CAMERA_SYSTEM.running = False # Signal thread to stop
     IS_CAMERA_RUNNING = False
     CAMERA_SYSTEM = None
+    
+    try:
+        import time
+        from indoor.tracker_deepsort import global_id_manager
+        from indoor.session_registry import session_registry
+        from indoor.presence_manager import presence_manager
+        
+        # Flush presence logs and update status to OUTDOOR
+        if presence_manager:
+            presence_manager.flush_all(time.time())
+            
+        # Clear identity and guest caches to allow fresh recognition on restart
+        if global_id_manager:
+            global_id_manager.active_identities.clear()
+        
+        if session_registry:
+            session_registry.guests.clear()
+            session_registry.last_seen.clear()
+            session_registry.guest_counter = 1
+            
+        print("[DASHBOARD] Cleaned up tracking state caches.")
+    except Exception as e:
+        print(f"[DASHBOARD] State cleanup error: {e}")
 
 class StreamingHandler(http.server.BaseHTTPRequestHandler):
     def get_stats(self):
@@ -815,14 +838,18 @@ class StreamingHandler(http.server.BaseHTTPRequestHandler):
                 const phWrapper = document.getElementById('placeholder-wrapper');
 
                 if (vidWrapper && phWrapper) {{
-                    if (data.is_active) {{
+                    // 🔥 UPDATE: Hanya tampilkan video jika 'is_visible' (Realtime)
+                    if (data.is_visible) {{
                         vidWrapper.style.display = 'block';
                         phWrapper.style.display = 'none';
                         if(statusEl) statusEl.style.color = '#0f0';
                     }} else {{
                         vidWrapper.style.display = 'none';
                         phWrapper.style.display = 'flex';
-                        if(statusEl) statusEl.style.color = '#fff';
+                        if(statusEl) {{
+                             // Status warnanya tetap hijau jika masih dianggap INDOOR (Buffered)
+                             statusEl.style.color = data.status.includes('INDOOR') ? '#0f0' : '#fff'; 
+                        }}
                     }}
                 }}
             }})
@@ -1118,11 +1145,18 @@ class StreamingHandler(http.server.BaseHTTPRequestHandler):
                     
                     with FRAME_LOCK:
                         # Jika user tidak terlihat, atau global frame belum ada
-                        if not active_cams or not LATEST_FRAMES_DICT:
-                            # Opsional: Tampilkan Global Grid sebagai Fallback 
-                            # atau Placeholder Hitam
-                            # Kita fallback ke Global Grid biar user tau sistem jalan
-                            display_data = LATEST_FRAME 
+                        # Jika user tidak terlihat, atau global frame belum ada
+                        if not active_cams:
+                            # 🔥 FIX: JANGAN Tampilkan Global Grid. Tampilkan Black Frame.
+                            try:
+                                # Create Black Image 640x360
+                                black_frame = np.zeros((360, 640, 3), dtype=np.uint8)
+                                cv2.putText(black_frame, "SEARCHING...", (220, 180), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (100, 100, 100), 2)
+                                s, b = cv2.imencode('.jpg', black_frame)
+                                if s: display_data = b.tobytes()
+                            except: display_data = None 
+                        elif not LATEST_FRAMES_DICT:
+                             display_data = LATEST_FRAME # Fallback only if detection OK but frame missing 
                         else:
                             # Jika user terlihat di satu atau lebih kamera
                             # Ambil frame dari LATEST_FRAMES_DICT
@@ -1206,10 +1240,18 @@ class StreamingHandler(http.server.BaseHTTPRequestHandler):
                     "room": "-", 
                     "duration": "-", 
                     "is_active": False,
+                    "is_visible": False, # 🔥 NEW: Realtime Visibility
                     "last_seen": "-",
                     "total_duration_today": total_dur_today,
                     "today_date": datetime.now().strftime("%Y-%m-%d")
                 }
+                
+                # Check Realtime Visibility First
+                if name and IS_CAMERA_RUNNING and CAMERA_SYSTEM:
+                    try:
+                        active_cams = CAMERA_SYSTEM.find_user_cameras(name)
+                        if active_cams: resp["is_visible"] = True
+                    except: pass
                 
                 if name and IS_CAMERA_RUNNING and presence_manager:
                     # Logic same as render_user_detail

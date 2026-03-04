@@ -48,20 +48,28 @@ class SmartVideoCapture:
                     pass
                 continue
 
-            with self.lock:
+            # JANGAN MENGUNCI LOCK SAAT BACA FRAME KARENA I/O BLOCKING
+            ret = False
+            frame = None
+            try:
+                if self.cap and self.cap.isOpened():
+                    # Grab agar buffer dibersihkan lebih cepat
+                    ret = self.cap.grab()
+                    if ret:
+                        ret, frame = self.cap.retrieve()
+            except Exception as e:
+                # print(f"[{self.name}] OpenCV Exception: {e}")
                 ret = False
                 frame = None
-                if self.cap.isOpened():
-                    ret, frame = self.cap.read()
             
-            if not ret:
+            if not ret or frame is None:
                 # print(f"[{self.name}] ⚠️ Gagal baca frame/Stream habis.")
                 self.status = False
+                time.sleep(0.1) # Beri nafas jika putus
                 continue
             
-            # Simpan frame terbaru saja (buang yang lama biar real-time)
+            # Simpan frame terbaru saja (buang yang lama) TANPA sleep
             self.q = [frame]
-            time.sleep(0.005) # Yield cpu dikit
 
     def read(self):
         if self.q:

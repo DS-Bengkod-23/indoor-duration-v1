@@ -3,6 +3,7 @@ import threading
 
 from indoor.face_recognizer import FaceRecognizer
 from indoor.osnet.reid_osnet import OSNetReID
+from indoor.face_detector import FaceDetectorYuNet
 from config.paths import get_model_paths
 
 from ultralytics import YOLO
@@ -63,3 +64,11 @@ def get_yolo_model():
                 _yolo_device = device
 
     return _yolo, _yolo_device
+
+
+def get_yunet():
+    """Per-camera FaceDetectorYuNet (NOT singleton).
+    YuNet punya internal state (setInputSize) yang TIDAK thread-safe saat dibagi
+    antar kamera. Setiap kamera mendapat instance sendiri agar tidak ada race condition.
+    """
+    return FaceDetectorYuNet()

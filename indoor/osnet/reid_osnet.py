@@ -6,7 +6,13 @@ import numpy as np
 class OSNetReID:
     def __init__(self, model_path):
         print("[OSNET] Loading ONNX model (Standard ImageNet Normalization Mode)...")
-        self.session = ort.InferenceSession(model_path, providers=["CUDAExecutionProvider", "CPUExecutionProvider"])
+        # 🔥 FIX ONNX THREAD CONTENTION 🔥
+        # Batasi jumlah thread internal ONNX Runtime agar tidak berebut CPU saat Multi-Threading Kamera.
+        sess_options = ort.SessionOptions()
+        sess_options.intra_op_num_threads = 2 
+        sess_options.inter_op_num_threads = 2
+        
+        self.session = ort.InferenceSession(model_path, sess_options=sess_options, providers=["CUDAExecutionProvider", "CPUExecutionProvider"])
         self.input_name = self.session.get_inputs()[0].name
 
     def preprocess(self, img):

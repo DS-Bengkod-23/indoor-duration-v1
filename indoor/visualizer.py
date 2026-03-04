@@ -1,194 +1,166 @@
 import cv2
 import numpy as np
+import threading
 
 class Visualizer:
     def __init__(self):
-        self.font = cv2.FONT_HERSHEY_SIMPLEX
-        self.green = (0, 255, 0)
+        self.font   = cv2.FONT_HERSHEY_SIMPLEX
+        self.green  = (0, 255, 0)
         self.orange = (0, 165, 255)
-        self.white = (255, 255, 255)
-        self.black = (0, 0, 0)
-        self.red = (0, 0, 255)
-        
-        # 🔥 PERSISTENT ID MAPPING 🔥
-        self.name_to_id = {} # { "Ilham": 1, "Guest-2": 2 }
-        self.next_pid = 1 # Start ID from 1
-        self.tid_to_pid = {} # Map Tracker ID -> Persistent ID (for inheritance)
-        self.name_to_id = {} # Map Identity Name -> Persistent ID
-        
-        # 🔥 GLOBAL SYNC: Shared active PIDs across all cameras per frame cycle
+        self.white  = (255, 255, 255)
+        self.black  = (0, 0, 0)
+        self.red    = (0, 0, 255)
+
+        # 🔥 STABLE PERSISTENT ID MAPPING 🔥
+        # Key: label string (name or Guest-X) → stable display PID
+        # Key: (cam_id, DeepSORT_tid)         → stable display PID  (per-camera!)
+        self._pid_lock  = threading.Lock()   # Hanya lock saat assign PID baru
+        self.name_to_id = {}
+        self.tid_to_pid = {}                 # Key: (cam_id, tid)
+        self.next_pid   = 1
+
         self.active_pids_cycle = set()
-        
+
     def start_new_cycle(self):
-        """
-        Dipanggil sekali setiap awal loop utama di video.py.
-        Mereset daftar PID yang aktif agar sinkron antar kamera.
-        """
         self.active_pids_cycle = set()
-        
-    def draw_tracks(self, frame, tracks, fusion_manager, face_vote_cache, local_pos_history):
-        """
-        Menggambar kotak bounding box dan label untuk setiap track.
-        """
-        active_names_in_frame = {}
-        # 🔥 FIX: Use Global Set (Shared across cameras)
-        active_pids_now = self.active_pids_cycle
-        
-        # Pre-pass untuk logika visual (siapa yang hijau, siapa yang orange)
-        # Sebenarnya logika ini agak hybrid, tapi kita coba visualkan saja hasil dari fusion.
-        
-        for t in tracks:
-            tid, bbox = t[0], t[1]
-            x1, y1, x2, y2 = map(int, bbox) # Pastikan int
-            
-            # Ambil label dari Fusion
-            # Ambil label dari Fusion
-            # Label bisa berupa: "Ilham", "Person 55", atau "Guest-3"
-            # label bisa "Ilham" (Hijau), "Guest-5" (Orange), atau "Person 10" (Orange/Raw)
-            label, is_real = fusion_manager.get_label(tid)
-            
-            # --- 🔥 STABLE ID TRANSITION (INHERITANCE LOGIC) 🔥 ---
-            pid = None
-            
-            # 🔥 FIX: Proper ID assignment for each unique identity
-            # 1. Cek apakah Label ini (misal "Ilham" atau "Guest-2") sudah punya PID history?
+
+    def _assign_pid(self, label, cam_tid_key):
+        """Thread-safe PID assignment. Return (pid, updated)."""
+        with self._pid_lock:
             if label in self.name_to_id and "Person " not in label:
-                # KASUS: Identity ini sudah pernah muncul sebelumnya
-                # Gunakan PID yang sama
                 pid = self.name_to_id[label]
-                
-                # Update memori Track ID agar ikut ID Identitas
-                self.tid_to_pid[tid] = pid
-            
-            # 2. Jika tidak ada di name_to_id, cek apakah Track ID ini punya PID warisan?
-            elif tid in self.tid_to_pid:
-                pid = self.tid_to_pid[tid] # Inherit ID lama dari track ini
-                
-                # 🔥 FIX: Update name_to_id untuk label baru ini
-                # Ini handle kasus: Guest-2 → "Ilham" (inheritance)
-                if "Person " not in label: 
-                    if label not in self.name_to_id:
-                        self.name_to_id[label] = pid
-            
-            else:
-                # 3. Benar-benar baru (Track baru & Identitas baru)
-                # 🔥 FIX: Assign PID untuk semua non-Person labels (including Guests!)
-                if "Person " not in label:
-                    # 🔥 COLLISION PREVENTION 🔥
-                    # Cari PID yang belum terpakai
-                    # Kumpulkan semua PID yang sudah digunakan
-                    used_pids = set(self.name_to_id.values()) | set(self.tid_to_pid.values())
-                    
-                    # Cari next available PID
-                    while self.next_pid in used_pids:
-                        self.next_pid += 1
-                    
-                    pid = self.next_pid
+                self.tid_to_pid[cam_tid_key] = pid
+                return pid
+
+            if cam_tid_key in self.tid_to_pid:
+                pid = self.tid_to_pid[cam_tid_key]
+                if "Person " not in label and label not in self.name_to_id:
                     self.name_to_id[label] = pid
-                    self.tid_to_pid[tid] = pid  # 🔥 FIX: Save mapping immediately
+                return pid
+
+            # Brand new: assign next available PID
+            if "Person " not in label:
+                used = set(self.name_to_id.values()) | set(self.tid_to_pid.values())
+                while self.next_pid in used:
                     self.next_pid += 1
+                pid = self.next_pid
+                self.next_pid += 1
+                self.name_to_id[label] = pid
+                self.tid_to_pid[cam_tid_key] = pid
+                return pid
 
-            # 🔥 FIX: COLLISION PREVENTION PER FRAME (LAST LINE OF DEFENSE) 🔥
-            if pid is not None:
-                if pid in active_pids_now:
-                    # COLLISION DETECTED! PID ini sudah dipakai track lain di frame ini!
-                    # Force Generate NEW PID
-                    used_pids_global = set(self.name_to_id.values()) | set(self.tid_to_pid.values()) | active_pids_now
-                    
-                    new_pid = self.next_pid
-                    while new_pid in used_pids_global:
-                         new_pid += 1
-                    
-                    pid = new_pid
-                    self.next_pid = new_pid + 1
-                    
-                    # 🔥 CRITICAL FIX: UPDATE MAPPING PERMANENTLY 🔥
-                    # Jangan cuma ganti PID untuk frame ini, tapi update 'name_to_id' juga!
-                    # Supaya frame depan dia tidak balik lagi ke PID lama yang conflict.
-                    self.name_to_id[label] = pid
-                    self.tid_to_pid[tid] = pid
-                
-                # Mark as used in this frame
-                active_pids_now.add(pid)
+            return None
 
-            # --- DISPLAY LOGIC ---
-            display_val = label # Default
-            if pid is not None:
-                if "Guest-" in label or "Person " in label: 
-                     display_val = f"ID: {pid}" # User minta simpel untuk unknown
-                else:
-                     display_val = f"{label} (ID: {pid})" # Known user
+    def _safe_bbox(self, bbox):
+        """Return (x1,y1,x2,y2) int, atau None jika koordinat tidak valid."""
+        try:
+            x1, y1, x2, y2 = [float(v) for v in bbox]
+            if any(v != v or abs(v) == float('inf') for v in (x1, y1, x2, y2)):
+                return None
+            return int(x1), int(y1), int(x2), int(y2)
+        except Exception:
+            return None
 
-            # Tentukan Warna dan Ketebalan
+    def draw_tracks(self, frame, tracks, fusion_manager, face_vote_cache, local_pos_history, cam_id=0):
+        """
+        Menggambar semua track.
+        Proses is_real (hijau) dahulu agar mendapat PID lebih kecil.
+        cam_id dipakai sebagai bagian key tid_to_pid agar tidak collision antar kamera.
+        """
+        # 🔥 SORT: registered (is_real=True) diproses duluan → dapat PID rendah dulu
+        def priority(t):
+            _, is_real = fusion_manager.get_label(t[0])
+            return 0 if is_real else 1
+        sorted_tracks = sorted(tracks, key=priority)
+
+        for t in sorted_tracks:
+            tid, bbox = t[0], t[1]
+
+            # 🔥 Safety: skip bbox dengan nilai infinity
+            coords = self._safe_bbox(bbox)
+            if coords is None:
+                continue
+            x1, y1, x2, y2 = coords
+
+            label, is_real = fusion_manager.get_label(tid)
+            cam_tid_key    = (cam_id, tid)
+
+            # Assign stable PID (thread-safe)
+            pid = self._assign_pid(label, cam_tid_key)
+
+            # --- GAMBAR ---
             if is_real:
-                # HIJAU: TEBAL + NAMA
+                # HIJAU: orang terdaftar & terverifikasi
                 color = self.green
-                thickness = 2
-                
-                # Get Persistent ID
-                if label in self.name_to_id:
-                     pid = self.name_to_id[label]
-                     display_val = f"{label} (ID: {pid})"
-                else:
-                     display_val = f"{label}" # Fallback (should not happen)
-                
-                # Gambar Kotak
-                cv2.rectangle(frame, (x1, y1), (x2, y2), color, thickness)
-                
-                # Gambar Label Background biar jelas
-                display_text = display_val
-                (text_w, text_h), baseline = cv2.getTextSize(display_text, self.font, 0.6, 2)
-                cv2.rectangle(frame, (x1, y1 - text_h - 10), (x1 + text_w, y1), color, -1)
-                cv2.putText(frame, display_text, (x1, y1 - 5), self.font, 0.6, self.black, 2)
-                
+                with self._pid_lock:
+                    display = f"{label} (ID: {self.name_to_id.get(label, pid)})"
+                cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+                (tw, th), _ = cv2.getTextSize(display, self.font, 0.6, 2)
+                cv2.rectangle(frame, (x1, y1 - th - 10), (x1 + tw, y1), color, -1)
+                cv2.putText(frame, display, (x1, y1 - 5), self.font, 0.6, self.black, 1)
+
             elif "Guest-" in label:
-                # 🔥 MERGE KE ORANGE SEPERTI PERMINTAAN USER 🔥
-                # Tetap Orange, tapi ID-nya Persistent!
+                # ORANGE: orang asing yang sudah punya Guest label
                 color = self.orange
-                thickness = 1
-                cv2.rectangle(frame, (x1, y1), (x2, y2), color, thickness)
-                
-                # Display Persistent ID
-                if label in self.name_to_id:
-                     pid = self.name_to_id[label]
-                     display_val = f"ID: {pid}" # User minta simpel
-                else:
-                     display_val = f"{label}" # Fallback
-                
-                cv2.putText(frame, display_val, (x1, y1 - 5), self.font, 0.6, color, 2)
+                cv2.rectangle(frame, (x1, y1), (x2, y2), color, 1)
+                show = f"ID: {pid}" if pid is not None else label
+                cv2.putText(frame, show, (x1, y1 - 5), self.font, 0.6, color, 2)
 
             else:
-                # ORANGE: TIPIS + POLOS (Bersih) - Raw Tracker
-                # Label: "Person 55"
+                # ORANGE TIPIS: raw tracker / track baru belum teridentifikasi
                 color = self.orange
-                thickness = 1
-                cv2.rectangle(frame, (x1, y1), (x2, y2), color, thickness)
-                
-                # Tampilkan ID agar user bisa register manual
-                cv2.putText(frame, f"ID: {tid}", (x1, y1 - 5), self.font, 0.6, color, 2)
+                cv2.rectangle(frame, (x1, y1), (x2, y2), color, 1)
+
+                if "Person " in label:
+                    # 🔥 FIX: Track baru dapat PID stabil langsung, bukan "?"
+                    # Hapus stale mapping dulu (jika pernah punya Guest label sebelumnya)
+                    with self._pid_lock:
+                        # Clear jika pernah punya mapping lama dari Guest → reset ke fresh PID
+                        old = self.tid_to_pid.get(cam_tid_key)
+                        if old is not None and old in set(self.name_to_id.values()):
+                            # Stale dari Guest mapping → hapus
+                            del self.tid_to_pid[cam_tid_key]
+                        if cam_tid_key not in self.tid_to_pid:
+                            used = set(self.name_to_id.values()) | set(self.tid_to_pid.values())
+                            while self.next_pid in used:
+                                self.next_pid += 1
+                            self.tid_to_pid[cam_tid_key] = self.next_pid
+                            self.next_pid += 1
+                        p = self.tid_to_pid[cam_tid_key]
+                    cv2.putText(frame, f"ID: {p}",
+                                (x1, y1 - 5), self.font, 0.6, color, 1)
+
+                elif pid is not None:
+                    # Known name tapi belum verified (is_real=False)
+                    cv2.putText(frame, f"{label}? ({pid})",
+                                (x1, y1 - 5), self.font, 0.5, color, 1)
+                else:
+                    # Fallback: assign PID baru
+                    with self._pid_lock:
+                        if cam_tid_key not in self.tid_to_pid:
+                            used = set(self.name_to_id.values()) | set(self.tid_to_pid.values())
+                            while self.next_pid in used:
+                                self.next_pid += 1
+                            self.tid_to_pid[cam_tid_key] = self.next_pid
+                            self.next_pid += 1
+                        p = self.tid_to_pid[cam_tid_key]
+                    cv2.putText(frame, f"ID: {p}",
+                                (x1, y1 - 5), self.font, 0.6, color, 1)
 
     def draw_fps(self, frame, fps):
         cv2.putText(frame, f"FPS: {fps:.1f}", (10, 40), self.font, 1.0, self.green, 2)
 
     def draw_notifications(self, frame, notification_queue):
-        """
-        Menggambar notifikasi dari queue.
-        """
         if len(notification_queue) > 0:
             notif = notification_queue[0]
-            text = notif["text"]
+            text  = notif["text"]
             color = notif["color"]
-            # timer = notif["timer"] # Timer handled in tracker logic logic usually, but here we just draw
-            
-            # Draw Background Box
-            (text_w, text_h), baseline = cv2.getTextSize(text, self.font, 1.0, 3)
-            
-            # Center aesthetic or Top Left? Existing code was (60, 100)
-            cv2.rectangle(frame, (50, 100 - text_h - 10), (50 + text_w + 20, 100 + 10), self.black, -1)
+            (tw, th), _ = cv2.getTextSize(text, self.font, 1.0, 3)
+            cv2.rectangle(frame, (50, 100 - th - 10), (50 + tw + 20, 110), self.black, -1)
             cv2.putText(frame, text, (60, 100), self.font, 1.0, color, 3)
 
     def draw_cam_id(self, frame, cam_id):
-        cv2.putText(frame, f"CAM {cam_id}", (10, 20), 
+        cv2.putText(frame, f"CAM {cam_id}", (10, 20),
                     self.font, 0.6, (0, 255, 255), 2)
 
 visualizer = Visualizer()

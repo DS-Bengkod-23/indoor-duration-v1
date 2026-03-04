@@ -318,6 +318,38 @@ class PresenceManager:
             if st["status"] == "INDOOR"
         ]
 
+    def start_tentative(self, person_id: str, now: float):
+        """
+        Dipanggil saat AI mulai ragu (fail_count > 0 tapi belum > 3).
+        Catat waktu mulai ragu sebagai 'tentative_start' tanpa mengubah apapun.
+        Waktu tetap berjalan seperti biasa.
+        """
+        for rooms in self.state.get(person_id, {}).values():
+            if rooms["status"] == "INDOOR" and "tentative_start" not in rooms:
+                rooms["tentative_start"] = now
+                print(f"[TENTATIVE] {person_id} mulai diragukan sejak {self._fmt_time(now)}")
+
+    def confirm_tentative(self, person_id: str):
+        """
+        Dipanggil saat AI mengkonfirmasi identitas benar kembali.
+        Hapus marker ragu — waktu selama ragu otomatis terhitung karena out_time terus update.
+        """
+        for rooms in self.state.get(person_id, {}).values():
+            if rooms["status"] == "INDOOR" and "tentative_start" in rooms:
+                del rooms["tentative_start"]
+                print(f"[TENTATIVE] {person_id} dikonfirmasi BENAR. Durasi tetap dihitung.")
+
+    def reject_tentative(self, person_id: str):
+        """
+        Dipanggil saat AI memutuskan identitas SALAH (drop ke oranye).
+        Rollback out_time ke sebelum periode ragu — waktu selama ragu dibuang.
+        """
+        for rooms in self.state.get(person_id, {}).values():
+            if rooms["status"] == "INDOOR":
+                tentative_start = rooms.pop("tentative_start", None)
+                if tentative_start is not None:
+                    self._update_out_time(rooms["log_index"], tentative_start)
+                    print(f"[TENTATIVE] {person_id} terbukti SALAH. Durasi di-rollback ke {self._fmt_time(tentative_start)}")
 
 # singleton
 presence_manager = PresenceManager()

@@ -2,6 +2,19 @@
 import os
 import warnings
 import sys
+import cv2
+
+# 🔥 FIX OpenCV & PyTorch Multi-threading Contention 🔥
+# Karena kita sudah pakai ThreadPoolExecutor (1 thread per kamera),
+# Kita harus cegah library di bawahnya untuk spawn thread tambahan yang bikin CPU Rebutan / Lag awal.
+cv2.setNumThreads(1)
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+try:
+    import torch
+    torch.set_num_threads(1)
+except: pass
 
 # 1. Sembunyikan Warning Sampah (InsightFace / Numpy FutureWarnings)
 warnings.filterwarnings("ignore", category=FutureWarning)

@@ -1,12 +1,12 @@
 # indoor/tracker_deepsort.py
 import cv2, time, numpy as np
-import threading # 🔥 THREAD SAFETY
+import threading 
 from indoor.face_detector import FaceDetectorYuNet
 from indoor.person_detector import PersonDetectorYOLO
 from indoor.fusion import FaceBodyFusion
 from indoor.deepsort.deep_sort import DeepSort
 from indoor.body_registry import body_registry
-from indoor.shared_models import get_face_recognizer, get_osnet
+from indoor.shared_models import get_face_recognizer, get_osnet, get_yunet
 from indoor.session_registry import session_registry
 from config.settings import SETTINGS
 from indoor.visualizer import visualizer
@@ -66,23 +66,14 @@ class GlobalIdentityManager:
         if curr_cam != cam_index:
             # JALUR VIP: SATU RUANGAN
             if is_same_room:
-                # 🔥 SOLUSI OVERLAP KAMERA (SATU RUANGAN) 🔥
-                # Jika time_diff < 3.0 (Target masih aktif di kamera lain):
-                
                 # 🔥 FACE BYPASS: WAJAH ADALAH KUNCI UTAMA 🔥
-                # Jika ini claim dari DETEKSI WAJAH ('FACE'), kita langsung izinkan 100%.
-                # Karena wajah itu bukti mutlak, tidak perlu debat soal threshold body.
                 if claim_type == 'FACE':
                     self.active_identities[name] = (cam_index, track_id, score, now)
                     return True
 
-                # Jika Body Only, baru kita pakai aturan ketat:
-                # Kita Izinkan "Double Presence" HANYA jika kemiripan TINGGI (> 0.82).
-                # Jika time_diff < frame_count (Target masih aktif di kamera lain):
-                # Kita Izinkan "Double Presence" HANYA jika kemiripan TINGGI.
+                # Jika Body Only
                 time_diff = now - last_seen
                 if time_diff < SETTINGS.get("time_back_view_window", 3.0):
-                    # 🔥 RELAXED FOR SEQUENTIAL ENTRY (SAME ROOM):
                     if score > SETTINGS.get("thresh_same_room", 0.68):
                         self.active_identities[name] = (cam_index, track_id, score, now)
                         return True
@@ -104,42 +95,42 @@ class GlobalIdentityManager:
                 self.active_identities[name] = (cam_index, track_id, score, now)
                 return True
 
-        # Anti-Hijack dalam satu kamera
+        # Anti-Hijack dalam satu kamera (Orang sama, ID Beda - Misal DeepSORT keputus)
         if curr_cam == cam_index and curr_id != track_id:
             time_gap = now - last_seen
             
             # 🔥 STRICT LOCK
-            # Reduce lock time: 3.0 -> 1.5 seconds.
-            # Agar kalau orang yang sama masuk lagi (handover cepet / re-entry), tidak dianggap imposter.
             if time_gap < 1.5:
                  if claim_type == 'FACE':
                      self.active_identities[name] = (cam_index, track_id, score, now)
                      return True
 
-                 # Relaxed score check: Allow if score > 0.65 (was 0.85)
                  if score > SETTINGS.get("thresh_strict_lock", 0.65) or score > (curr_score + 0.20):
                      self.active_identities[name] = (cam_index, track_id, score, now)
                      return True
                  
-                 print(f"[CLAIM REJECT] Strict Lock. Score {score:.2f} not enough vs Curr {curr_score:.2f} (+0.20 needed or >0.65)")
+                 print(f"[CLAIM REJECT] Strict Lock. Score {score:.2f} not enough vs Curr {curr_score:.2f}")
                  return False
             
             if claim_type == 'FACE': 
                 self.active_identities[name] = (cam_index, track_id, score, now)
                 return True
-            else: return True # 🔥 Auto-Allow if time_gap >= 1.5s (Reset Lock)
+            else: 
+                # Waktu sudah lewat 1.5s, kasih langsung masuk
+                self.active_identities[name] = (cam_index, track_id, score, now)
+                return True
 
-        if score > (curr_score + 0.05): # 🔥 UPDATE: Butuh margin +0.05 untuk update score (Stabilizer)
+        if score > (curr_score + 0.05): 
             self.active_identities[name] = (cam_index, track_id, score, now)
             return True
             
-        return True 
+        return False # 🔥 FIX FATAL BUG: Sebelumnya Return True terus yang bikin ID lompat-lompat!
 
 global_id_manager = GlobalIdentityManager()
 
 class MultiObjectTracker:
     def __init__(self):
-        self.face_detector = FaceDetectorYuNet()
+        self.face_detector = get_yunet()
         self.face_recognizer = get_face_recognizer()
         self.person_detector = PersonDetectorYOLO()
         self.osnet = get_osnet()
@@ -165,6 +156,20 @@ class MultiObjectTracker:
         
         # 🔥 FAST-ID Identity Map (Missing Init Fix)
         self.guest_identity_map = {}
+        
+        # 🔥 FACE THROTTLING CACHE 🔥
+        self.face_cooldown_timer = {}
+        
+        # 🔥 PERSISTENT GUEST OWNERSHIP MAP 🔥
+        # Mencegah duplicate Guest ID tanpa bergantung pada urutan pemrosesan track.
+        # guest_tid_map: { "Guest-5": 7 } → tid mana yang "memiliki" Guest ini
+        # tid_guest_map: { 7: "Guest-5" } → Guest mana yang dimiliki track ini
+        self.guest_tid_map = {}   # guest_id → tid
+        self.tid_guest_map = {}   # tid → guest_id
+        
+        # 🔥 PROVISIONAL TRACKING 🔥
+        from indoor.presence_manager import presence_manager as _pm
+        self._pm = _pm
 
     def set_camera_id(self, cam_id):
         self.camera_id = cam_id
@@ -217,6 +222,11 @@ class MultiObjectTracker:
         tracks = self.deepsort.get_active_tracks(with_feature=True)
         
         run_ai_recognition = (self.frame_idx % SETTINGS["face_interval"] == 0)
+        # 🔥 OPTIMIZATION: Jangan jalankan Face Recog dan YOLO di frame yang SAMA 
+        # Ini mencegah CPU Spike (Lag patah-patah yang drastis) di satu frame.
+        if run_detection and run_ai_recognition:
+            run_ai_recognition = False
+            
         current_face_map = {} 
         curr_time_now = time.time()
 
@@ -233,10 +243,22 @@ class MultiObjectTracker:
                 max_faces = SETTINGS.get("max_faces_to_process", 10)
                 if faces_processed_count >= max_faces: break
                 
-                # 🔥 SITTING OPTIMIZATION: EXPAND SEARCH AREA 🔥
-                # Saat duduk, kepala ada di bagian atas, tapi proporsi tubuh memendek.
-                # Jadi kita harus cari agak lebih dalam ke bawah (1.2 instead of 1.5 divider).
-                search_y1 = max(0, y1 - 40) 
+                # 🔥 FIX ENTRY LAG: Grace period untuk track BARU 🔥
+                # Saat orang pertama kali masuk frame, DeepSORT butuh beberapa frame
+                # untuk stabilkan posisi bbox. Jika langsung scan → CPU spike → ngeframe.
+                # Solusi: Track baru (belum pernah ada di cooldown timer) dapat jeda 3 siklus dulu.
+                if tid not in self.face_cooldown_timer:
+                    self.face_cooldown_timer[tid] = 3  # 3 siklus × face_interval=7 ≈ ~21 frame jeda
+                
+                # 🔥 THROTTLING LOGIC (CPU SAVER) 🔥
+                # Jika track_id ini lagi cooldown (karena wajah tak dikenali/tak ketemu), SKIP deteksi!
+                if self.face_cooldown_timer.get(tid, 0) > 0:
+                    self.face_cooldown_timer[tid] -= 1
+                    continue
+
+                # Expand search area upwards significantly (by 25% of body height or at least 80px)
+                up_expand = max(80, int((y2-y1)*0.25))
+                search_y1 = max(0, y1 - up_expand) 
                 face_search_area = frame[search_y1:min(frame.shape[0], y1 + int((y2-y1)/1.2)), max(0, x1):x2]
                 
                 if face_search_area.size > 0:
@@ -245,10 +267,17 @@ class MultiObjectTracker:
                         fx, fy, fw, fh = max(faces, key=lambda f: f[2] * f[3])
                         if fw > 15 and fh > 15: 
                             abs_x, abs_y = x1 + fx, search_y1 + fy
-                            y_start = max(0, abs_y)
-                            y_end = min(frame.shape[0], abs_y + fh)
-                            x_start = max(0, abs_x)
-                            x_end = min(frame.shape[1], abs_x + fw)
+                            
+                            # 🔥 FIX: Wajah dekat tidak terdeteksi 🔥
+                            # InsightFace/RetinaFace sgt butuh margin (rambut/dagu/telinga). Jika terlalu ketat, akan gagal.
+                            margin_w = int(fw * 0.4)
+                            margin_h = int(fh * 0.4)
+                            
+                            y_start = max(0, abs_y - margin_h)
+                            y_end = min(frame.shape[0], abs_y + fh + margin_h)
+                            x_start = max(0, abs_x - margin_w)
+                            x_end = min(frame.shape[1], abs_x + fw + margin_w)
+                            
                             if y_end > y_start and x_end > x_start:
                                 face_crop = frame[y_start:y_end, x_start:x_end]
                                 if face_crop.size > 0:
@@ -263,14 +292,14 @@ class MultiObjectTracker:
                                                 
                                                 # 🔥 UPDATE LAST CONFIRMED TIME 🔥
                                                 self.last_face_confirmed[tid] = curr_time_now
-
+                                                self.face_cooldown_timer[tid] = 0 # Reset cooldown karena berhasil
+                                                
                                                 if self.face_vote_cache[tid][name] >= 1: # Instan 1 frame
                                                     if global_id_manager.try_claim_identity(name, self.camera_id, tid, score, 'FACE'):
                                                         self.fusion.lock_real_name(tid, name)
                                                         self.reid_skip_timer[tid] = 0
                                                         
                                                         # 🔥 LANGSUNG SIMPAN BODY SAAT PERTAMA KALI DIKENALI 🔥
-                                                        # Ini mengatasi race condition dimana is_real_now masih False
                                                         try:
                                                             body_feat = self.extract_body_feature(frame, bbox, tid)
                                                             if body_feat is not None:
@@ -279,9 +308,32 @@ class MultiObjectTracker:
                                                                     body_registry.register(name, body_feat)
                                                                     print(f"[FIRST-SAVE] Body pertama untuk {name} tersimpan! (Total: {current_len+1})")
                                                         except: pass
+                                                    else:
+                                                        # 🔥 FIX FREEZE: Highlander reject (identitas sudah dipakai track lain)
+                                                        # Kasih cooldown agar track ini (mis. foto HP) tidak terus scan face
+                                                        self.face_cooldown_timer[tid] = 10
+                                                        self.face_vote_cache.pop(tid, None) # Reset vote cache
                                             else:
                                                 current_face_map[tid] = "UNKNOWN_FACE"
-                                    except Exception as e: pass
+                                                # Kasih cooldown 5 cycle (karena gak kenal)
+                                                self.face_cooldown_timer[tid] = 5 
+                                        else:
+                                            # Gagal ekstrak fitur (wajah burem/terlalu kecil/potongan ketat)
+                                            # 🔥 FIX FREEZE: Kasih cooldown panjang (10) agar CPU tidak disiksa terus menerus
+                                            self.face_cooldown_timer[tid] = 10
+                                            
+                                    except Exception as e: 
+                                        self.face_cooldown_timer[tid] = 10
+                                else:
+                                    self.face_cooldown_timer[tid] = 5
+                            else:
+                                self.face_cooldown_timer[tid] = 5
+                        else:
+                            self.face_cooldown_timer[tid] = 5
+                    else:
+                        self.face_cooldown_timer[tid] = 5
+                else:
+                    self.face_cooldown_timer[tid] = 5
                 faces_processed_count += 1 
 
         # --- DETEKSI OCCLUSION (TUMPANG TINDIH) ---
@@ -316,24 +368,35 @@ class MultiObjectTracker:
                             self.occlusion_cooldown[tid2] = curr_time_now
 
         # --- PROSES OSNET (Body ReID) ---
+        # 🔥 PERSISTENT GUEST OWNERSHIP: Bersihkan track mati dari ownership map
+        active_tids_set = {t[0] for t in tracks}
+        for dead_tid in list(self.tid_guest_map.keys()):
+            if dead_tid not in active_tids_set:
+                owned = self.tid_guest_map.pop(dead_tid)
+                if self.guest_tid_map.get(owned) == dead_tid:
+                    del self.guest_tid_map[owned]
+                    # 🔥 RELEASE GLOBAL OWNERSHIP agar kamera lain bisa klaim jika orang sama terdeteksi
+                    session_registry.release_globally(owned, self.camera_id, dead_tid)
+        
         for t in tracks:
             tid, bbox = t[0], t[1]
-            x1, y1, x2, y2 = bbox
+            # 🔥 SAFETY: Skip track dengan bbox infinity (mencegah int(inf) crash)
+            try:
+                x1, y1, x2, y2 = [float(v) for v in bbox]
+                if any(v != v or abs(v) == float('inf') for v in (x1, y1, x2, y2)):
+                    continue
+            except Exception:
+                continue
             label, is_real_now = self.fusion.get_label(tid)
             
             # 🔥 KEEP ALIVE (PENTING BUAT ANTI-CLONING) 🔥 
-            # Jika identitas sudah verified, kita harus lapor "SAYA MASIH DISINI" setiap frame.
-            # Kalau tidak lapor, timestamp akan expired > 3 detik, dan kamera lain bisa mencuri ID ini.
             if is_real_now:
                  still_valid = global_id_manager.try_claim_identity(label, self.camera_id, tid, 1.0, 'KEEP_ALIVE')
                  if not still_valid:
-                     # 🚨 HIGHLANDER PROTOCOL: THERE CAN BE ONLY ONE 🚨
-                     # Global Manager menolak klaim kita (berarti diambil alih kamera lain).
-                     # Kita harus MENGALAH (Drop Identity) sekarang juga.
                      print(f"[ANTI-CLONE] ID {label} diambil alih kamera lain. Drop tracking di Cam {self.camera_id}.")
                      self.fusion.lock_real_name(tid, f"Person {tid}")
                      self.fusion.set_is_real(tid, False)
-                     is_real_now = False # Update status lokal biar gak lanjut proses di bawah
+                     is_real_now = False
             
             should_run_osnet = False 
             if is_real_now:
@@ -341,9 +404,13 @@ class MultiObjectTracker:
                     should_run_osnet = False
                     self.reid_skip_timer[tid] -= 1 
                 else:
-                    should_run_osnet = True
+                    if (self.frame_idx + int(tid)) % 4 == 0:
+                        should_run_osnet = True
+                    else:
+                        should_run_osnet = False
             else:
-                if (self.frame_idx + int(tid)) % 3 == 0:
+                # 🔥 OPTIMIZATION CPU: Guest/Stranger ReID Throttling 🔥
+                if (self.frame_idx + int(tid)) % 9 == 0:
                     should_run_osnet = True
                 else:
                     should_run_osnet = False
@@ -352,6 +419,7 @@ class MultiObjectTracker:
                 feat = self.extract_body_feature(frame, bbox, tid)
             else:
                 feat = None
+                # Tidak perlu lightweight Highlander di sini — ownership map sudah handle stabilitas
 
             if feat is not None:
                 active_list = global_id_manager.get_active_names_list()
@@ -420,22 +488,18 @@ class MultiObjectTracker:
                         # Kita anggap ini "Ganti Baju" & Kita Paksa Belajar.
                         is_face_confirmed = (detected_face == label)
                         
-                        if is_face_confirmed:
+                        if is_face_confirmed and raw_score < 0.60:
                             # BYPASS ANTI-NYANGKUT
                             # Jangan reset walau skor body 0.2 (karena baju beda).
                             # Justru harus kita simpan biar sistem tau baju baru ini.
-                            self.reid_skip_timer[tid] = 0 # Biar next frame diproses lagi
+                            self.reid_skip_timer[tid] = 30 # Beri cooldown panjang biar CPU lega
                             
                             # PAKSA SIMPAN (Force Learn) & GANTI ANCHOR
                             # Karena skor sangat rendah (baju beda total), kita request REPLACE ANCHORS.
                             # Artinya: Lupakan baju lama, fokus ke baju baru ini.
                             try:
-                                # 🔥 TUNED: 0.50 -> 0.60. Biar lebih sensitif kalau warna baju mirip (misal Biru Tua vs Hitam)
-                                should_replace = (raw_score < 0.60) 
-                                body_registry.register(label, feat, force_replace_anchors=should_replace)
-                                
-                                action_msg = "REPLACE OLD DATA" if should_replace else "ADD NEW DATA"
-                                print(f"[NEW-OUTFIT] Wajah cocok! {action_msg} untuk {label} (Skor lama: {raw_score:.2f})")
+                                body_registry.register(label, feat, force_replace_anchors=True)
+                                print(f"[UPDATE] Baju/Sisi baru {label} disimpan (Skor lama: {raw_score:.2f})")
                                 
                                 # 🔥 TAMBAHKAN NOTIFIKASI VISUAL 🔥
                                 self.notification_queue.append({
@@ -454,19 +518,25 @@ class MultiObjectTracker:
                             self.verification_counter[f"fail_{tid}"] = fail_count
                             
                             if fail_count > 3: # Reset hanya jika sudah 3x gagal
-                                print(f"[ANTI-NYANGKUT] ID {tid} drop! Skor: {raw_score:.2f} (Occluded: {is_occluded}). RESET!")
+                                print(f"[WARNING] {label} menghadap belakang / tumpang tindih. Skor drop: {raw_score:.2f}. Suspend ID sementara.")
+                                # 🔥 PROVISIONAL: AI putuskan SALAH → rollback durasi ragu
+                                self._pm.reject_tentative(label)
                                 self.fusion.lock_real_name(tid, f"Person {tid}")
                                 self.fusion.set_is_real(tid, False)
-                                self.reid_skip_timer[tid] = 0 
+                                # 🔥 FIX FREEZE SAAT KOREKSI: Kasih cooldown agar face+body tidak langsung spike bersamaan
+                                self.reid_skip_timer[tid] = 6      # Tunda body ReID 1 siklus OSNet
+                                self.face_cooldown_timer[tid] = 15 # Tunda face scan 15 siklus (jangan langsung scan lagi)
                                 if label in global_id_manager.active_identities:
                                     del global_id_manager.active_identities[label]
                                 is_real_now = False 
                             else:
-                                # Masih dalam masa toleransi, pertahankan status hijau
-                                # Tapi jangan update score (pakai score lama)
+                                # 🔥 PROVISIONAL: AI mulai ragu → tandai waktu mulai ragu
+                                self._pm.start_tentative(label, curr_time_now)
                                 pass 
                         else:
                             self.reid_skip_timer[tid] = 30
+                            # 🔥 PROVISIONAL: Body score bagus lagi → konfirmasi BENAR
+                            self._pm.confirm_tentative(label)
                             
                             # 🔥 LOGIKA BARU: SMART AUTO-UPDATE (BELAJAR TERUS TAPI AMAN) 🔥
                             # Syarat: Skor Tinggi (>0.80) DAN Baru saja lihat wajah (< 5 detik lalu)
@@ -480,9 +550,10 @@ class MultiObjectTracker:
                             should_save_now = False
                             if not is_occluded: # Cuma boleh save kalau bersih (tidak occluded)
                                 if is_bootstrapping:
-                                    should_save_now = (self.frame_idx % 5 == 0)
+                                    should_save_now = True # OSNet is already throttled
                                 else:
-                                    should_save_now = (self.frame_idx % 10 == 0)
+                                    # Randomly skip 50% to spread out learning over time
+                                    should_save_now = (np.random.rand() > 0.5)
                             
                             # TURUNIN AMBANG SKOR: 0.80 -> 0.78 (Biar lebih gampang nangkep pas muter)
                             # 🔥 LOGIKA SIDE-VIEW TANGKAP CEPAT (Agresif) 🔥
@@ -781,30 +852,9 @@ class MultiObjectTracker:
             label, is_real = self.fusion.get_label(tid)
 
             # 🔥 UPDATE v12.17: TRUSTED BACK VIEW LEARNING 🔥
-            # Masalah: Tampak belakang tidak terekam karena fitur beda jauh dengan depan.
-            # Solusi: Jika wajah masih "fresh" (baru dilihat < 5 detik lalu),
-            # Kita paksa sistem untuk BELAJAR fitur badan saat ini (Auto-Learn),
-            # Asumsinya: Orangnya sama, cuma lagi muter badan.
-            if is_real and label != f"Person {tid}":
-                last_face = self.last_face_confirmed.get(tid, 0)
-                if time.time() - last_face < 5.0: # 5 Detik setelah wajah hilang
-                     # 🔥 FIX: IMPLEMENTASI "FORCE LEARN" (Tampak Belakang)
-                     # Kita gunakan fitur yang ada di body_registry untuk memaksa update anchors.
-                     try:
-                         # Ambil tracks yang fiturnya available (di DeepSORT biasanya tersimpan)
-                         # Tapi di loop ini kita tidak punya akses direct ke 'feat' raw.
-                         # Workaround: Kita berharap 'auto-learn' di atas sudah menangani feat extraction.
-                         # TAPI, kita bisa panggil extract_body_feature LAGI kalau perlu.
-                         
-                         feat_force = self.extract_body_feature(frame, bbox, tid)
-                         if feat_force is not None:
-                             # PANGGIL DENGAN FORCE!
-                             body_registry.register(label, feat_force, force_replace_anchors=True)
-                             print(f"[FORCE LEARN] Memaksa belajar tampak belakang untuk {label}!")
-                     except Exception as e:
-                         print(f"[FORCE LEARN ERROR] {e}")
-
-
+            # (CLEANED) Force Learn Tampak Belakang dihapus karena memicu infinite loop CPU Lag
+            # Jika identitas drop, biarkan sistem mere-indentifikasi saat wajah muncul lagi.
+            pass
             if is_real: 
                 if label in active_names_in_frame:
                     prev_tid = active_names_in_frame[label]
@@ -847,7 +897,7 @@ class MultiObjectTracker:
             pass
 
         # Call Visualizer (Outside Loop)
-        visualizer.draw_tracks(out, tracks, self.fusion, self.face_vote_cache, self.local_pos_history)
+        visualizer.draw_tracks(out, tracks, self.fusion, self.face_vote_cache, self.local_pos_history, cam_id=self.camera_id)
 
         # Garbage Collector
         if self.frame_idx % 300 == 0:
