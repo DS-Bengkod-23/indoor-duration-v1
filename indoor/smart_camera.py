@@ -24,6 +24,7 @@ class SmartVideoCapture:
 
     def _reader(self):
         while self.running:
+            t_start = time.time()
             if not self.status:
                 # 🔥 LOGIKA AUTO-RECONNECT 🔥
                 # print(f"[{self.name}] Koneksi putus/init... Reconnect dalam 2 detik...")
@@ -53,10 +54,19 @@ class SmartVideoCapture:
             frame = None
             try:
                 if self.cap and self.cap.isOpened():
-                    # Grab agar buffer dibersihkan lebih cepat
+                    # Grab satu per satu (Kamera otomatis membuang antrean karena CAP_PROP_BUFFERSIZE = 1)
+                    # Jangan pakai while True grab(), OpenCV grab() bersifat BLOCKING dan bikin layar beku.
                     ret = self.cap.grab()
                     if ret:
                         ret, frame = self.cap.retrieve()
+                        
+                        # 🔥 THREAD STARVATION GUARD 🔥
+                        # Jika loop ini tidur terlalu lama akibat CPU dimonopoli YOLO/OSNet,
+                        # OS menyumpal frame kamera di antrean internal. Grab paksa 1-2x untuk membuangnya!
+                        elapsed = time.time() - t_start
+                        if elapsed > 0.05: # Telat setengah detik, pasti numpuk
+                            self.cap.grab()
+                            self.cap.grab()
             except Exception as e:
                 # print(f"[{self.name}] OpenCV Exception: {e}")
                 ret = False

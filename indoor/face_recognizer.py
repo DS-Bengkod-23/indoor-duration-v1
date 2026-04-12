@@ -15,11 +15,11 @@ class FaceRecognizer:
         
         try:
             providers = ["CUDAExecutionProvider"]
-            self.app = FaceAnalysis(name="buffalo_s", providers=providers)
+            self.app = FaceAnalysis(name="buffalo_s", allowed_modules=['detection', 'recognition'], providers=providers)
             self.app.prepare(ctx_id=0, det_size=(160, 160))
         except Exception:
             providers = ["CPUExecutionProvider"]
-            self.app = FaceAnalysis(name="buffalo_s", providers=providers)
+            self.app = FaceAnalysis(name="buffalo_s", allowed_modules=['detection', 'recognition'], providers=providers)
             self.app.prepare(ctx_id=-1, det_size=(160, 160))
 
         self.db = {}

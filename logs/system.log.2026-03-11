@@ -1,0 +1,79 @@
+2026-03-11 02:22:04 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-11 02:22:04 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-11 02:22:04 [INFO] Target Kamera dari Config: 4
+2026-03-11 02:22:09 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-11 02:22:45 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-11 02:37:53 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-11 02:37:53 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-11 02:37:53 [INFO] Target Kamera dari Config: 4
+2026-03-11 02:37:57 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-11 02:41:45 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-11 04:34:40 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-11 04:34:40 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-11 04:34:40 [INFO] Target Kamera dari Config: 4
+2026-03-11 04:34:46 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-11 04:37:18 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-11 04:49:24 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-11 04:49:24 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-11 04:49:24 [INFO] Target Kamera dari Config: 4
+2026-03-11 04:49:29 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-11 04:49:40 [ERROR] [CRASH GUARD] Error di Cam 0: 'NoneType' object has no attribute 'flatten'. Skipping frame.
+2026-03-11 04:50:58 [ERROR] [CRASH GUARD] Error di Cam 0: 'NoneType' object has no attribute 'flatten'. Skipping frame.
+2026-03-11 04:51:19 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-11 04:51:41 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-11 04:51:41 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-11 04:51:41 [INFO] Target Kamera dari Config: 4
+2026-03-11 04:51:46 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-11 04:51:55 [ERROR] [CRASH GUARD] Error di Cam 0: 'NoneType' object has no attribute 'flatten'. Skipping frame.
+2026-03-11 04:52:07 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-11 12:08:44 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-11 12:08:44 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-11 12:08:44 [INFO] Target Kamera dari Config: 4
+2026-03-11 12:08:50 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-11 12:09:06 [ERROR] [CRASH GUARD] Error di Cam 0: 'NoneType' object has no attribute 'flatten'. Skipping frame.
+2026-03-11 12:09:27 [ERROR] [CRASH GUARD] Error di Cam 0: 'NoneType' object has no attribute 'flatten'. Skipping frame.
+2026-03-11 12:09:59 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-11 12:15:48 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-11 12:15:48 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-11 12:15:48 [INFO] Target Kamera dari Config: 4
+2026-03-11 12:15:53 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-11 12:17:05 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-11 12:22:30 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-11 12:22:30 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-11 12:22:30 [INFO] Target Kamera dari Config: 4
+2026-03-11 12:22:35 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-11 12:23:23 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-11 12:31:54 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-11 12:31:54 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-11 12:31:54 [INFO] Target Kamera dari Config: 4
+2026-03-11 12:32:01 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-11 12:33:20 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-11 12:33:30 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-11 12:33:30 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-11 12:33:30 [INFO] Target Kamera dari Config: 4
+2026-03-11 12:33:34 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-11 12:33:48 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-11 12:33:54 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-11 12:33:54 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-11 12:33:54 [INFO] Target Kamera dari Config: 4
+2026-03-11 12:33:59 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-11 12:34:22 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-11 16:46:40 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-11 16:46:40 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-11 16:46:40 [INFO] Target Kamera dari Config: 4
+2026-03-11 16:47:15 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-11 16:47:15 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-11 16:47:15 [INFO] Target Kamera dari Config: 4
+2026-03-11 16:47:20 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-11 16:48:32 [ERROR] [CRASH GUARD] Error di Cam 0: cannot convert float infinity to integer. Skipping frame.
+2026-03-11 16:49:47 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-11 16:50:01 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-11 16:50:01 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-11 16:50:01 [INFO] Target Kamera dari Config: 4
+2026-03-11 16:50:05 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-11 16:50:51 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-11 16:57:01 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-11 16:57:01 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-11 16:57:01 [INFO] Target Kamera dari Config: 4
+2026-03-11 16:57:06 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-11 16:58:37 [INFO] ========== [SYSTEM OFFLINE] ==========

@@ -158,7 +158,9 @@ class BodyRegistry:
 
         for name, gallery in self.profiles.items():
             local_max_score = 0.0
-            for db_feat in gallery:
+            # 🔥 SPEED: Hanya bandingkan max 10 fitur terakhir (bukan semua 50)
+            check_gallery = gallery[-10:] if len(gallery) > 10 else gallery
+            for db_feat in check_gallery:
                 db_feat = db_feat.flatten()
                 if db_feat.shape[0] != query_feat.shape[0]: 
                     continue

@@ -8,10 +8,10 @@
 # - FALSE detection singkat TIDAK masuk log
 # - Log hanya dibuat saat status BENAR-BENAR stabil
 # ============================================================
-
 import time
 import os
 import cv2  # Added for image saving
+import threading # Added for async I/O
 from typing import Dict, List, Set, Optional, Any # Added Any for frame
 from config.settings import SETTINGS
 from config.paths import LOG_DIR
@@ -78,10 +78,16 @@ class PresenceManager:
             
             # Only save if not already exists (Proof of FIRST presence)
             if not os.path.exists(filename):
-                cv2.imwrite(filename, frame)
-                print(f"[SNAPSHOT] Saved for {person_id} at {filename}")
+                # 🔥 ASYNC I/O GUARD 🔥
+                # Lempar proses simpan HDD ke belakang agar Kamera tak Freeze.
+                def save_img():
+                    try: cv2.imwrite(filename, frame)
+                    except: pass
+                
+                threading.Thread(target=save_img, daemon=True).start()
+                print(f"[SNAPSHOT] Memulai Background Save {person_id} ke {filename}")
         except Exception as e:
-            print(f"[ERROR] Failed to save snapshot: {e}")
+            print(f"[ERROR] Failed to init snapshot async thread: {e}")
 
     def _print_log(self, idx: int):
         log = self.logs[idx]
@@ -100,10 +106,15 @@ class PresenceManager:
                 # Tambahkan Tanggal [YYYY-MM-DD] untuk parsing yang lebih baik
                 file_msg = f"[{time.strftime('%Y-%m-%d')}] {msg}\n"
                 
-                with open(os.path.join(LOG_DIR, "system.log"), "a", encoding="utf-8") as f:
-                    f.write(file_msg)
+                # 🔥 ASYNC I/O GUARD 🔥
+                # Tulis file secara paralel tanpa nge-block Stream Video.
+                def append_log():
+                    with open(os.path.join(LOG_DIR, "system.log"), "a", encoding="utf-8") as f:
+                        f.write(file_msg)
+                
+                threading.Thread(target=append_log, daemon=True).start()
             except Exception as e:
-                print(f"[ERROR] Gagal tulis log: {e}")
+                print(f"[ERROR] Gagal execute log async: {e}")
 
     def _append_log(
         self,

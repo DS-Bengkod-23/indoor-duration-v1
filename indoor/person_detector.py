@@ -32,6 +32,7 @@ class PersonDetectorYOLO:
                 classes=self.classes,
                 device=self.device,
                 half=self.half,
+                imgsz=320,
                 verbose=False
             )
         except TypeError:

@@ -1,0 +1,334 @@
+2026-03-04 00:02:59 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 00:02:59 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 00:02:59 [INFO] Target Kamera dari Config: 4
+2026-03-04 00:03:05 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 00:03:34 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 00:27:17 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 00:27:17 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 00:27:17 [INFO] Target Kamera dari Config: 4
+2026-03-04 00:27:23 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 00:28:01 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 01:22:11 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 01:22:11 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 01:22:11 [INFO] Target Kamera dari Config: 4
+2026-03-04 01:22:16 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 01:22:18 [ERROR] [CRASH GUARD] Error di Cam 0: cannot access local variable 'presence_manager' where it is not associated with a value. Skipping frame.
+2026-03-04 01:22:20 [ERROR] [CRASH GUARD] Error di Cam 0: cannot access local variable 'presence_manager' where it is not associated with a value. Skipping frame.
+2026-03-04 01:22:22 [ERROR] [CRASH GUARD] Error di Cam 0: cannot access local variable 'presence_manager' where it is not associated with a value. Skipping frame.
+2026-03-04 01:22:24 [ERROR] [CRASH GUARD] Error di Cam 0: cannot access local variable 'presence_manager' where it is not associated with a value. Skipping frame.
+2026-03-04 01:22:26 [ERROR] [CRASH GUARD] Error di Cam 0: cannot access local variable 'presence_manager' where it is not associated with a value. Skipping frame.
+2026-03-04 01:22:27 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 01:25:55 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 01:25:55 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 01:25:55 [INFO] Target Kamera dari Config: 4
+2026-03-04 01:26:00 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 01:26:22 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 01:44:07 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 01:44:07 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 01:44:07 [INFO] Target Kamera dari Config: 4
+2026-03-04 01:44:13 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 01:44:40 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 01:46:37 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 01:46:37 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 01:46:37 [INFO] Target Kamera dari Config: 4
+2026-03-04 01:46:42 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 01:49:48 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 01:53:30 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 01:53:30 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 01:53:30 [INFO] Target Kamera dari Config: 4
+2026-03-04 01:53:35 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 01:55:23 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 01:57:02 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 01:57:02 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 01:57:02 [INFO] Target Kamera dari Config: 4
+2026-03-04 01:57:07 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 01:59:40 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 02:10:32 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 02:10:32 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 02:10:32 [INFO] Target Kamera dari Config: 4
+2026-03-04 02:10:38 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 02:10:46 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 02:10:55 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 02:10:55 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 02:10:55 [INFO] Target Kamera dari Config: 4
+2026-03-04 02:11:00 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 02:11:08 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 02:11:17 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 02:11:17 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 02:11:17 [INFO] Target Kamera dari Config: 4
+2026-03-04 02:11:23 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 02:17:21 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 03:04:27 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 03:04:27 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 03:04:27 [INFO] Target Kamera dari Config: 4
+2026-03-04 03:04:33 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 03:06:04 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 03:10:19 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 03:10:19 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 03:10:19 [INFO] Target Kamera dari Config: 4
+2026-03-04 03:10:24 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 03:11:00 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 10:55:41 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 10:55:41 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 10:55:41 [INFO] Target Kamera dari Config: 4
+2026-03-04 10:55:47 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 10:56:31 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 10:56:40 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 10:56:40 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 10:56:40 [INFO] Target Kamera dari Config: 4
+2026-03-04 10:56:45 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 10:56:56 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 10:59:49 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 10:59:49 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 10:59:49 [INFO] Target Kamera dari Config: 4
+2026-03-04 10:59:55 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 11:00:26 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 11:03:34 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 11:03:34 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 11:03:34 [INFO] Target Kamera dari Config: 4
+2026-03-04 11:03:39 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 11:04:10 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 11:15:44 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 11:15:44 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 11:15:44 [INFO] Target Kamera dari Config: 4
+2026-03-04 11:15:49 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 11:15:57 [ERROR] [CRASH GUARD] Error di Cam 1: cannot convert float infinity to integer. Skipping frame.
+2026-03-04 11:15:59 [ERROR] [CRASH GUARD] Error di Cam 1: cannot convert float infinity to integer. Skipping frame.
+2026-03-04 11:16:15 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 11:25:35 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 11:25:35 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 11:25:35 [INFO] Target Kamera dari Config: 4
+2026-03-04 11:25:40 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 11:26:19 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 11:36:33 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 11:36:33 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 11:36:33 [INFO] Target Kamera dari Config: 4
+2026-03-04 11:36:38 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 11:37:08 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 11:42:54 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 11:42:54 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 11:42:54 [INFO] Target Kamera dari Config: 4
+2026-03-04 11:43:00 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 11:43:55 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 11:48:33 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 11:48:33 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 11:48:33 [INFO] Target Kamera dari Config: 4
+2026-03-04 11:48:39 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 11:50:15 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 11:50:35 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 11:50:35 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 11:50:35 [INFO] Target Kamera dari Config: 4
+2026-03-04 11:50:40 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 11:51:12 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 11:54:31 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 11:54:31 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 11:54:31 [INFO] Target Kamera dari Config: 4
+2026-03-04 11:54:37 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 11:55:27 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 12:34:29 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 12:34:29 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 12:34:29 [INFO] Target Kamera dari Config: 4
+2026-03-04 12:34:46 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 12:35:15 [ERROR] [CRASH GUARD] Error di Cam 1: cannot convert float infinity to integer. Skipping frame.
+2026-03-04 12:35:15 [ERROR] [CRASH GUARD] Error di Cam 1: cannot convert float infinity to integer. Skipping frame.
+2026-03-04 12:35:36 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 13:09:57 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 13:09:57 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 13:09:57 [INFO] Target Kamera dari Config: 4
+2026-03-04 13:10:02 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 13:10:13 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 13:25:47 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 13:25:47 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 13:25:47 [INFO] Target Kamera dari Config: 4
+2026-03-04 13:25:52 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 13:26:05 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 13:36:32 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 13:36:32 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 13:36:32 [INFO] Target Kamera dari Config: 4
+2026-03-04 13:36:37 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 13:36:58 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 13:39:50 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 13:39:50 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 13:39:50 [INFO] Target Kamera dari Config: 4
+2026-03-04 13:39:55 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 13:40:26 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 13:40:34 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 13:40:34 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 13:40:34 [INFO] Target Kamera dari Config: 4
+2026-03-04 13:40:40 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 13:40:55 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 13:41:03 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 13:41:03 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 13:41:03 [INFO] Target Kamera dari Config: 4
+2026-03-04 13:41:07 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 13:41:19 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 13:41:26 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 13:41:26 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 13:41:26 [INFO] Target Kamera dari Config: 4
+2026-03-04 13:41:31 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 13:41:50 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 13:41:58 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 13:41:58 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 13:41:58 [INFO] Target Kamera dari Config: 4
+2026-03-04 13:42:03 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 13:42:21 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 13:47:37 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 13:47:37 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 13:47:37 [INFO] Target Kamera dari Config: 4
+2026-03-04 13:47:43 [INFO] Sistem berjalan (Main Loop Active).
+[2026-03-04] 2. ilham gozali | Ruang Dosen | 13:47:44 → 13:47:56 | Ruang Dosen | UNKNOWN
+[2026-03-04] 3. ilham gozali | Ruang Dosen | 13:47:44 → 13:47:56 | Ruang Dosen | OUTDOOR
+2026-03-04 13:50:33 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 13:50:47 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 13:50:47 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 13:50:47 [INFO] Target Kamera dari Config: 4
+2026-03-04 13:50:53 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 13:51:14 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 14:04:21 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 14:04:21 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 14:04:21 [INFO] Target Kamera dari Config: 4
+2026-03-04 14:04:26 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 14:04:52 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 14:04:59 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 14:04:59 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 14:04:59 [INFO] Target Kamera dari Config: 4
+2026-03-04 14:05:03 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 14:05:36 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 14:05:50 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 14:05:50 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 14:05:50 [INFO] Target Kamera dari Config: 4
+2026-03-04 14:05:54 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 14:06:09 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 14:37:28 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 14:37:28 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 14:37:28 [INFO] Target Kamera dari Config: 4
+2026-03-04 14:37:35 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 14:37:55 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 14:38:08 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 14:38:08 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 14:38:08 [INFO] Target Kamera dari Config: 4
+2026-03-04 14:38:13 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 14:39:07 [ERROR] [CRASH GUARD] Error di Cam 0: OpenCV(4.11.0) d:\a\opencv-python\opencv-python\opencv\modules\dnn\src\legacy_backend.hpp:295: error: (-215:Assertion failed) ld.inputBlobs[0]->total() == total(shapes[index]) in function 'cv::dnn::dnn4_v20241223::detail::BlobManager::allocateBlobsForLayer'
+. Skipping frame.
+2026-03-04 14:39:18 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 14:52:57 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 14:52:57 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 14:52:57 [INFO] Target Kamera dari Config: 4
+2026-03-04 14:53:05 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 14:53:19 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 14:54:34 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 14:54:34 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 14:54:34 [INFO] Target Kamera dari Config: 4
+2026-03-04 14:56:06 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 14:56:06 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 14:56:06 [INFO] Target Kamera dari Config: 4
+2026-03-04 14:56:12 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 14:56:19 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 14:56:29 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 14:56:29 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 14:56:29 [INFO] Target Kamera dari Config: 4
+2026-03-04 14:56:35 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 14:57:05 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 14:57:24 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 14:57:24 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 14:57:24 [INFO] Target Kamera dari Config: 4
+2026-03-04 14:57:29 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 14:57:33 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 14:57:59 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 14:57:59 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 14:57:59 [INFO] Target Kamera dari Config: 4
+2026-03-04 14:58:04 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 14:58:27 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 14:58:36 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 14:58:36 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 14:58:36 [INFO] Target Kamera dari Config: 4
+2026-03-04 14:58:41 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 15:00:02 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 15:35:39 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 15:35:39 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 15:35:39 [INFO] Target Kamera dari Config: 4
+2026-03-04 15:35:45 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 15:36:16 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 15:37:29 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 15:37:29 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 15:37:29 [INFO] Target Kamera dari Config: 4
+2026-03-04 15:37:35 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 15:39:36 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 15:39:49 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 15:39:49 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 15:39:49 [INFO] Target Kamera dari Config: 4
+2026-03-04 15:39:53 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 15:40:18 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 15:40:35 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 15:40:35 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 15:40:35 [INFO] Target Kamera dari Config: 4
+2026-03-04 15:40:40 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 15:41:02 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 15:42:01 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 15:42:01 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 15:42:01 [INFO] Target Kamera dari Config: 4
+2026-03-04 15:42:06 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 15:42:40 [ERROR] [CRASH GUARD] Error di Cam 1: cannot convert float infinity to integer. Skipping frame.
+2026-03-04 15:42:41 [ERROR] [CRASH GUARD] Error di Cam 1: cannot convert float infinity to integer. Skipping frame.
+2026-03-04 15:43:09 [ERROR] [CRASH GUARD] Error di Cam 1: cannot convert float infinity to integer. Skipping frame.
+2026-03-04 15:43:10 [ERROR] [CRASH GUARD] Error di Cam 1: cannot convert float infinity to integer. Skipping frame.
+2026-03-04 15:43:11 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 15:49:46 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 15:49:46 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 15:49:46 [INFO] Target Kamera dari Config: 4
+2026-03-04 15:49:52 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 15:50:35 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 16:01:34 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 16:01:34 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 16:01:34 [INFO] Target Kamera dari Config: 4
+2026-03-04 22:33:03 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 22:33:03 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 22:33:03 [INFO] Target Kamera dari Config: 4
+2026-03-04 22:33:10 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 22:33:19 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 23:00:52 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 23:00:52 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 23:00:52 [INFO] Target Kamera dari Config: 4
+2026-03-04 23:00:58 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 23:01:59 [WARNING] [SYSTEM SHUTDOWN] User menekan Ctrl+C.
+2026-03-04 23:01:59 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 23:02:11 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 23:02:11 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 23:02:11 [INFO] Target Kamera dari Config: 4
+2026-03-04 23:02:17 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 23:02:21 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 23:06:15 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 23:06:15 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 23:06:15 [INFO] Target Kamera dari Config: 4
+2026-03-04 23:06:21 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 23:06:32 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 23:06:42 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 23:06:42 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 23:06:42 [INFO] Target Kamera dari Config: 4
+2026-03-04 23:06:48 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 23:07:05 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 23:07:12 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 23:07:12 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 23:07:12 [INFO] Target Kamera dari Config: 4
+2026-03-04 23:07:18 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 23:08:19 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 23:08:42 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 23:08:42 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 23:08:42 [INFO] Target Kamera dari Config: 4
+2026-03-04 23:08:47 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 23:08:58 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 23:13:02 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 23:13:02 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 23:13:02 [INFO] Target Kamera dari Config: 4
+2026-03-04 23:13:08 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 23:13:25 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 23:44:40 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 23:44:40 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 23:44:40 [INFO] Target Kamera dari Config: 4
+2026-03-04 23:44:46 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 23:47:54 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-04 23:55:16 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-04 23:55:16 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-04 23:55:16 [INFO] Target Kamera dari Config: 4
+2026-03-04 23:55:35 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-04 23:56:09 [INFO] ========== [SYSTEM OFFLINE] ==========

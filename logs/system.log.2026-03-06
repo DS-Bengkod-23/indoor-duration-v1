@@ -1,0 +1,145 @@
+2026-03-06 00:23:13 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-06 00:23:13 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-06 00:23:13 [INFO] Target Kamera dari Config: 4
+2026-03-06 00:23:18 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-06 00:23:31 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-06 00:25:31 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-06 00:25:31 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-06 00:25:31 [INFO] Target Kamera dari Config: 4
+2026-03-06 00:26:11 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-06 00:26:29 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-06 00:26:36 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-06 00:26:36 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-06 00:26:36 [INFO] Target Kamera dari Config: 4
+2026-03-06 00:26:41 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-06 00:27:59 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-06 00:28:32 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-06 00:28:32 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-06 00:28:32 [INFO] Target Kamera dari Config: 4
+2026-03-06 00:28:39 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-06 00:28:46 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-06 00:29:00 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-06 00:29:00 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-06 00:29:00 [INFO] Target Kamera dari Config: 4
+2026-03-06 00:29:05 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-06 00:30:07 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-06 00:38:35 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-06 00:38:35 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-06 00:38:35 [INFO] Target Kamera dari Config: 4
+2026-03-06 00:38:41 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-06 00:38:59 [ERROR] [CRASH GUARD] Error di Cam 1: 'SessionRegistry' object has no attribute 'release_globally'. Skipping frame.
+2026-03-06 00:39:26 [ERROR] [CRASH GUARD] Error di Cam 1: 'SessionRegistry' object has no attribute 'release_globally'. Skipping frame.
+2026-03-06 00:39:50 [ERROR] [CRASH GUARD] Error di Cam 0: 'SessionRegistry' object has no attribute 'release_globally'. Skipping frame.
+2026-03-06 00:39:52 [ERROR] [CRASH GUARD] Error di Cam 1: 'SessionRegistry' object has no attribute 'release_globally'. Skipping frame.
+2026-03-06 00:40:57 [ERROR] [CRASH GUARD] Error di Cam 0: 'SessionRegistry' object has no attribute 'release_globally'. Skipping frame.
+2026-03-06 00:41:05 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-06 00:41:31 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-06 00:41:31 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-06 00:41:31 [INFO] Target Kamera dari Config: 4
+2026-03-06 00:41:36 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-06 00:41:48 [ERROR] [CRASH GUARD] Error di Cam 0: 'SessionRegistry' object has no attribute 'release_globally'. Skipping frame.
+2026-03-06 00:41:48 [ERROR] [CRASH GUARD] Error di Cam 1: 'SessionRegistry' object has no attribute 'release_globally'. Skipping frame.
+2026-03-06 00:43:04 [ERROR] [CRASH GUARD] Error di Cam 0: 'SessionRegistry' object has no attribute 'release_globally'. Skipping frame.
+2026-03-06 00:43:05 [ERROR] [CRASH GUARD] Error di Cam 1: 'SessionRegistry' object has no attribute 'release_globally'. Skipping frame.
+2026-03-06 00:44:26 [ERROR] [CRASH GUARD] Error di Cam 0: 'SessionRegistry' object has no attribute 'release_globally'. Skipping frame.
+2026-03-06 00:44:43 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-06 00:45:20 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-06 00:45:20 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-06 00:45:20 [INFO] Target Kamera dari Config: 4
+2026-03-06 00:45:25 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-06 00:46:45 [ERROR] [CRASH GUARD] Error di Cam 1: 'SessionRegistry' object has no attribute 'release_globally'. Skipping frame.
+2026-03-06 00:46:57 [ERROR] [CRASH GUARD] Error di Cam 0: 'SessionRegistry' object has no attribute 'release_globally'. Skipping frame.
+2026-03-06 00:47:06 [ERROR] [CRASH GUARD] Error di Cam 0: 'SessionRegistry' object has no attribute 'release_globally'. Skipping frame.
+2026-03-06 00:47:09 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-06 04:34:13 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-06 04:34:13 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-06 04:34:13 [INFO] Target Kamera dari Config: 4
+2026-03-06 04:34:19 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-06 04:34:41 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-06 10:42:29 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-06 10:42:29 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-06 10:42:29 [INFO] Target Kamera dari Config: 4
+2026-03-06 10:42:34 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-06 10:42:59 [ERROR] [CRASH GUARD] Error di Cam 0: 'SessionRegistry' object has no attribute 'release_globally'. Skipping frame.
+2026-03-06 10:43:05 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-06 10:56:26 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-06 10:56:26 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-06 10:56:26 [INFO] Target Kamera dari Config: 4
+2026-03-06 10:56:31 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-06 10:56:51 [ERROR] [CRASH GUARD] Error di Cam 1: 'SessionRegistry' object has no attribute 'release_globally'. Skipping frame.
+2026-03-06 10:57:12 [ERROR] [CRASH GUARD] Error di Cam 1: 'SessionRegistry' object has no attribute 'release_globally'. Skipping frame.
+2026-03-06 10:57:26 [ERROR] [CRASH GUARD] Error di Cam 1: cannot convert float infinity to integer. Skipping frame.
+2026-03-06 10:57:37 [ERROR] [CRASH GUARD] Error di Cam 0: 'SessionRegistry' object has no attribute 'release_globally'. Skipping frame.
+2026-03-06 10:57:39 [ERROR] [CRASH GUARD] Error di Cam 1: 'SessionRegistry' object has no attribute 'release_globally'. Skipping frame.
+2026-03-06 10:57:43 [ERROR] [CRASH GUARD] Error di Cam 1: 'SessionRegistry' object has no attribute 'release_globally'. Skipping frame.
+2026-03-06 10:58:02 [ERROR] [CRASH GUARD] Error di Cam 1: 'SessionRegistry' object has no attribute 'release_globally'. Skipping frame.
+2026-03-06 10:58:14 [ERROR] [CRASH GUARD] Error di Cam 1: cannot convert float infinity to integer. Skipping frame.
+2026-03-06 10:58:18 [ERROR] [CRASH GUARD] Error di Cam 1: cannot convert float infinity to integer. Skipping frame.
+2026-03-06 10:58:18 [ERROR] [CRASH GUARD] Error di Cam 1: cannot convert float infinity to integer. Skipping frame.
+2026-03-06 10:58:37 [ERROR] [CRASH GUARD] Error di Cam 1: cannot convert float infinity to integer. Skipping frame.
+2026-03-06 10:58:39 [ERROR] [CRASH GUARD] Error di Cam 1: 'SessionRegistry' object has no attribute 'release_globally'. Skipping frame.
+2026-03-06 10:58:39 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-06 11:38:14 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-06 11:38:14 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-06 11:38:14 [INFO] Target Kamera dari Config: 4
+2026-03-06 11:38:19 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-06 11:38:45 [ERROR] [CRASH GUARD] Error di Cam 1: 'SessionRegistry' object has no attribute 'release_globally'. Skipping frame.
+2026-03-06 11:38:57 [ERROR] [CRASH GUARD] Error di Cam 1: 'SessionRegistry' object has no attribute 'release_globally'. Skipping frame.
+2026-03-06 11:39:08 [ERROR] [CRASH GUARD] Error di Cam 0: 'SessionRegistry' object has no attribute 'release_globally'. Skipping frame.
+2026-03-06 11:39:08 [ERROR] [CRASH GUARD] Error di Cam 1: 'SessionRegistry' object has no attribute 'release_globally'. Skipping frame.
+2026-03-06 11:39:10 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-06 13:11:44 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-06 13:11:44 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-06 13:11:44 [INFO] Target Kamera dari Config: 4
+2026-03-06 13:11:49 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-06 13:12:57 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-06 15:10:03 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-06 15:10:03 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-06 15:10:03 [INFO] Target Kamera dari Config: 4
+2026-03-06 15:10:09 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-06 15:10:26 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-06 15:10:37 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-06 15:10:37 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-06 15:10:37 [INFO] Target Kamera dari Config: 4
+2026-03-06 15:10:42 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-06 15:11:02 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-06 15:13:21 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-06 15:13:21 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-06 15:13:21 [INFO] Target Kamera dari Config: 4
+2026-03-06 15:13:26 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-06 15:13:42 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-06 15:13:56 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-06 15:13:56 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-06 15:13:56 [INFO] Target Kamera dari Config: 4
+2026-03-06 15:14:01 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-06 15:14:22 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-06 15:14:44 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-06 15:14:44 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-06 15:14:44 [INFO] Target Kamera dari Config: 4
+2026-03-06 15:14:49 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-06 15:16:47 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-06 15:21:33 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-06 15:21:33 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-06 15:21:33 [INFO] Target Kamera dari Config: 4
+2026-03-06 15:21:38 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-06 15:22:49 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-06 16:33:11 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-06 16:33:11 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-06 16:33:11 [INFO] Target Kamera dari Config: 4
+2026-03-06 16:33:17 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-06 16:35:00 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-06 16:50:57 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-06 16:50:57 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-06 16:50:57 [INFO] Target Kamera dari Config: 4
+2026-03-06 16:51:03 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-06 16:52:26 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-06 16:57:15 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-06 16:57:15 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-06 16:57:15 [INFO] Target Kamera dari Config: 4
+2026-03-06 16:57:19 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-06 16:57:23 [INFO] ========== [SYSTEM OFFLINE] ==========
+2026-03-06 16:57:35 [INFO] ========== [SYSTEM STARTUP] ==========
+2026-03-06 16:57:35 [INFO] Menginisialisasi Sistem Kamera...
+2026-03-06 16:57:35 [INFO] Target Kamera dari Config: 4
+2026-03-06 16:57:39 [INFO] Sistem berjalan (Main Loop Active).
+2026-03-06 16:58:48 [INFO] ========== [SYSTEM OFFLINE] ==========

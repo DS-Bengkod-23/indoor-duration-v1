@@ -53,9 +53,10 @@ class Visualizer:
 
     def _safe_bbox(self, bbox):
         """Return (x1,y1,x2,y2) int, atau None jika koordinat tidak valid."""
+        import math
         try:
             x1, y1, x2, y2 = [float(v) for v in bbox]
-            if any(v != v or abs(v) == float('inf') for v in (x1, y1, x2, y2)):
+            if any(math.isnan(v) or math.isinf(v) or abs(v) > 100000 for v in (x1, y1, x2, y2)):
                 return None
             return int(x1), int(y1), int(x2), int(y2)
         except Exception:

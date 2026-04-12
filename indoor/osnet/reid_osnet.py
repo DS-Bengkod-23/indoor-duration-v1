@@ -44,6 +44,13 @@ class OSNetReID:
         if crop is None or crop.size == 0:
             return None
 
+        # 🔥 EDGE-CASE LAG GUARD 🔥
+        # Tolak gambar hancur (Off-Frame / Tertutup) yang akan membuat 
+        # Model ONNX/Pytorch menderita Exception di memori (Pemicu Patah/Lagging)
+        h, w = crop.shape[:2]
+        if h < 30 or w < 10:
+            return None
+
         inp = self.preprocess(crop)
         feat = self.session.run(None, {self.input_name: inp})[0][0]
         
